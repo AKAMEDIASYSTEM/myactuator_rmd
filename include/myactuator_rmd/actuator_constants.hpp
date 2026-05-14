@@ -5,6 +5,15 @@
  *    In 2024 the actuators were re-branded, see https://www.myactuator.com/downloads-x-series
  * \author
  *    Tobit Flatscher (github.com/2b-t)
+ * AKA added RH-series specs to the end of this
+ * this file can be used as is, replacing myactuator_rmd/include/myactuator_rmd/actuator_constants.hpp
+ * you also need to add to the bindings/myactuator_rmd.cpp file:
+after this line:
+   myactuator_rmd::bindings::declareActuator<myactuator_rmd::X15_400>(m_actuator_constants,  "X15_400");
+  add:
+  myactuator_rmd::bindings::declareActuator<myactuator_rmd::RH_17>(m_actuator_constants,  "RH_17");
+  myactuator_rmd::bindings::declareActuator<myactuator_rmd::RH_32_50>(m_actuator_constants,  "RH_32_50");
+  myactuator_rmd::bindings::declareActuator<myactuator_rmd::RH_32_100>(m_actuator_constants,  "RH_32_100");
 */
 
 #ifndef MYACTUATOR_RMD__ACTUATOR_CONSTANTS
@@ -482,6 +491,47 @@ namespace myactuator_rmd {
       static constexpr float torque_constant {rated_torque/rated_current}; // (5.65) in Nm/A
       static constexpr float rotor_inertia {175000}; // in gcm2
       static constexpr std::int16_t number_of_pole_pairs {21};
+  };
+
+  /**\class RH_17
+   * \brief
+   *    Constants for the RH_17 actuator
+   *    See https://www.myactuator.com/rh-17details
+  */
+  class RH_17 {
+    public:
+      static constexpr float reducer_ratio {100.0/1};
+      static constexpr float rated_speed {25}; // in rpm
+      static constexpr float rated_current {4.7}; // in A
+      static constexpr float rated_power {91}; // in W
+      static constexpr float rated_torque {35}; // in Nm
+      static constexpr float torque_constant {rated_torque/rated_current}; //7.45
+      static constexpr float rotor_inertia {5600000}; // in gcm2
+      static constexpr std::int16_t number_of_pole_pairs {10};
+  };
+
+    class RH_32_100 {
+    public:
+      static constexpr float reducer_ratio {100.0/1};
+      static constexpr float rated_speed {18}; // in rpm
+      static constexpr float rated_current {21.8}; // in A
+      static constexpr float rated_power {282}; // in W
+      static constexpr float rated_torque {150}; // in Nm
+      static constexpr float torque_constant {rated_torque/rated_current};//5.35
+      static constexpr float rotor_inertia {83200000}; // in gcm2
+      static constexpr std::int16_t number_of_pole_pairs {10};
+  };
+
+    class RH_32_50 {
+    public:
+      static constexpr float reducer_ratio {50.0/1};
+      static constexpr float rated_speed {18}; // in rpm
+      static constexpr float rated_current {21.8}; // in A
+      static constexpr float rated_power {282}; // in W
+      static constexpr float rated_torque {150}; // in Nm
+      static constexpr float torque_constant {rated_torque/rated_current};//5.35
+      static constexpr float rotor_inertia {83200000}; // in gcm2
+      static constexpr std::int16_t number_of_pole_pairs {10};
   };
 
 }
