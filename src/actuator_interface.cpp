@@ -160,7 +160,7 @@ namespace myactuator_rmd {
   Feedback ActuatorInterface::sendForcePositionSetpoint(float const position, float const max_speed, std::uint8_t const max_torque) {
     SetForcePositionRequest const request {position, max_speed, max_torque};
     // The motor returns standard Feedback (MotorStatus2) for this command
-    SetPositionAbsoluteResponse const response {driver_.sendRecv(request, actuator_id_)};
+    GetForcePositionResponse const response {driver_.sendRecv(request, actuator_id_)};
     return response.getStatus();
   }
 

@@ -245,6 +245,8 @@ namespace myactuator_rmd {
 
   using GetMotorStatus2Response = FeedbackResponse<CommandType::READ_MOTOR_STATUS_2>;
   using SetPositionAbsoluteResponse = FeedbackResponse<CommandType::ABSOLUTE_POSITION_CLOSED_LOOP_CONTROL>;
+  // Near other response aliases
+  using GetForcePositionResponse = FeedbackResponse<CommandType::FORCE_POSITION_CLOSED_LOOP_CONTROL>;
   using SetTorqueResponse = FeedbackResponse<CommandType::TORQUE_CLOSED_LOOP_CONTROL>;
   using SetVelocityResponse = FeedbackResponse<CommandType::SPEED_CLOSED_LOOP_CONTROL>;
 
