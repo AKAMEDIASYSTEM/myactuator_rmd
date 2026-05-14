@@ -95,6 +95,7 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     .def("reset", &myactuator_rmd::ActuatorInterface::reset)
     .def("sendCurrentSetpoint", &myactuator_rmd::ActuatorInterface::sendCurrentSetpoint)
     .def("sendPositionAbsoluteSetpoint", &myactuator_rmd::ActuatorInterface::sendPositionAbsoluteSetpoint)
+    .def("sendForcePositionSetpoint", &myactuator_rmd::ActuatorInterface::sendForcePositionSetpoint)
     .def("sendTorqueSetpoint", &myactuator_rmd::ActuatorInterface::sendTorqueSetpoint)
     .def("sendVelocitySetpoint", &myactuator_rmd::ActuatorInterface::sendVelocitySetpoint)
     .def("setAcceleration", &myactuator_rmd::ActuatorInterface::setAcceleration)

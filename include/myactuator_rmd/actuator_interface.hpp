@@ -275,6 +275,17 @@ namespace myactuator_rmd {
        * \return
        *    Feedback control message containing actuator position, velocity, torque and temperature
       */
+
+      /**
+       * \brief Send a force-limited position set-point
+       * \param[in] position Target angle in degrees
+       * \param[in] max_speed Maximum speed in dps
+       * \param[in] max_torque Max torque (0-255, where 100 = 100% rated current)
+       * \return Feedback status (temperature, current, speed, angle)
+       */
+      Feedback sendForcePositionSetpoint(float const position, float const max_speed, std::uint8_t const max_torque);
+
+
       Feedback sendTorqueSetpoint(float const torque, float const torque_constant);
 
       /**\fn sendVelocitySetpoint

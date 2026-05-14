@@ -305,6 +305,23 @@ namespace myactuator_rmd {
       float getPosition() const noexcept;
   };
 
+  class SetForcePositionRequest: public SingleMotorRequest<CommandType::FORCE_POSITION_CLOSED_LOOP_CONTROL> {
+  public:
+    /**
+     * @param position Target position in degrees
+     * @param max_speed Speed limit in degrees per second
+     * @param max_torque Torque limit as a percentage of rated current (0-255)
+     */
+    SetForcePositionRequest(float const position, float const max_speed, std::uint8_t const max_torque)
+    : SingleMotorRequest{} {
+      auto const pos {static_cast<std::int32_t>(position * 100.0f)};
+      auto const speed {static_cast<std::uint16_t>(max_speed)};
+      setAt(max_torque, 1);
+      setAt(speed, 2);
+      setAt(pos, 4);
+    }
+};
+
   /**\class SetTimeoutRequest
    * \brief
    *    Request for setting the communication interruption protection time setting
