@@ -250,7 +250,8 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     .def("getVelocity", &myactuator_rmd::motion_mode::MotionModeResponse::getVelocity)
     .def("getTorque", &myactuator_rmd::motion_mode::MotionModeResponse::getTorque);
 
-  pybind11::class_<myactuator_rmd::motion_mode::CanDriver>(m_motion, "CanDriver")
+// Added ', myactuator_rmd::Driver' to explicitly declare inheritance to Python
+  pybind11::class_<myactuator_rmd::motion_mode::CanDriver, myactuator_rmd::Driver>(m_motion, "CanDriver")
     .def(pybind11::init<std::string const&>());
 
   pybind11::class_<myactuator_rmd::motion_mode::ActuatorInterface>(m_motion, "ActuatorInterface")
