@@ -3,6 +3,7 @@
 #pragma once
 
 #include "myactuator_rmd/driver/can_node.hpp"
+#include "myactuator_rmd/driver/driver.hpp"
 #include "myactuator_rmd/protocol/motion_mode_message.hpp"
 
 namespace myactuator_rmd {
@@ -16,7 +17,8 @@ namespace motion_mode {
 
   class ActuatorInterface {
     public:
-      ActuatorInterface(CanDriver& driver, std::uint32_t actuator_id)
+// NEW: Accept Driver& instead of CanDriver& to access the public methods
+      ActuatorInterface(Driver& driver, std::uint32_t actuator_id)
       : driver_{driver}, actuator_id_{actuator_id} {
           driver_.addId(actuator_id_);
       }
@@ -28,7 +30,7 @@ namespace motion_mode {
       }
 
     private:
-      CanDriver& driver_;
+      Driver& driver_;
       std::uint32_t actuator_id_;
   };
 

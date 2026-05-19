@@ -254,7 +254,7 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     .def(pybind11::init<std::string const&>());
 
   pybind11::class_<myactuator_rmd::motion_mode::ActuatorInterface>(m_motion, "ActuatorInterface")
-    .def(pybind11::init<myactuator_rmd::motion_mode::CanDriver&, std::uint32_t>(), pybind11::keep_alive<1, 2>())
+    .def(pybind11::init<myactuator_rmd::Driver&, std::uint32_t>(), pybind11::keep_alive<1, 2>()) // <-- UPDATED
     .def("sendMotionModeSetpoint", &myactuator_rmd::motion_mode::ActuatorInterface::sendMotionModeSetpoint);
 
 }
