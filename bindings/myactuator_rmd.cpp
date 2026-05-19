@@ -33,6 +33,7 @@
 #include "myactuator_rmd/actuator_interface.hpp"
 #include "myactuator_rmd/exceptions.hpp"
 #include "myactuator_rmd/io.hpp"
+#include "myactuator_rmd/motion_mode.hpp"
 
 
 namespace myactuator_rmd {
@@ -240,5 +241,20 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
   myactuator_rmd::bindings::declareActuator<myactuator_rmd::X10_100>(m_actuator_constants,  "X10_100");
   myactuator_rmd::bindings::declareActuator<myactuator_rmd::X12_150>(m_actuator_constants,  "X12_150");
   myactuator_rmd::bindings::declareActuator<myactuator_rmd::X15_400>(m_actuator_constants,  "X15_400");
+
+  /* new motion-mode stuff May 19 2026 */
+  auto m_motion = m.def_submodule("motion_mode", "Submodule for 0x400 Motion Mode");
+
+  pybind11::class_<myactuator_rmd::motion_mode::MotionModeResponse>(m_motion, "MotionModeResponse")
+    .def("getPosition", &myactuator_rmd::motion_mode::MotionModeResponse::getPosition)
+    .def("getVelocity", &myactuator_rmd::motion_mode::MotionModeResponse::getVelocity)
+    .def("getTorque", &myactuator_rmd::motion_mode::MotionModeResponse::getTorque);
+
+  pybind11::class_<myactuator_rmd::motion_mode::CanDriver>(m_motion, "CanDriver")
+    .def(pybind11::init<std::string const&>());
+
+  pybind11::class_<myactuator_rmd::motion_mode::ActuatorInterface>(m_motion, "ActuatorInterface")
+    .def(pybind11::init<myactuator_rmd::motion_mode::CanDriver&, std::uint32_t>(), pybind11::keep_alive<1, 2>())
+    .def("sendMotionModeSetpoint", &myactuator_rmd::motion_mode::ActuatorInterface::sendMotionModeSetpoint);
 
 }
