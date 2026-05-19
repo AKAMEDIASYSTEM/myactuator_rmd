@@ -23,8 +23,8 @@ namespace motion_mode {
           driver_.addId(actuator_id_);
       }
 
-      MotionModeResponse sendMotionModeSetpoint(float p_des, float v_des, float kp, float kd, float t_ff) {
-          MotionModeRequest const request{p_des, v_des, kp, kd, t_ff};
+      MotionModeResponse sendMotionModeSetpoint(float p_des, float v_des, float kp, float kd, float t_ff_percent, float kp_max = 500.0f, float kd_max = 5.0f) {
+          MotionModeRequest const request{p_des, v_des, kp, kd, t_ff_percent, kp_max, kd_max};
           auto const response_data = driver_.sendRecv(request, actuator_id_);
           return MotionModeResponse{response_data};
       }

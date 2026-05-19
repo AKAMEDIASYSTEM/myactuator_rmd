@@ -248,14 +248,16 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
   pybind11::class_<myactuator_rmd::motion_mode::MotionModeResponse>(m_motion, "MotionModeResponse")
     .def("getPosition", &myactuator_rmd::motion_mode::MotionModeResponse::getPosition)
     .def("getVelocity", &myactuator_rmd::motion_mode::MotionModeResponse::getVelocity)
-    .def("getTorque", &myactuator_rmd::motion_mode::MotionModeResponse::getTorque);
+    .def("getTorquePercent", &myactuator_rmd::motion_mode::MotionModeResponse::getTorquePercent); // Updated
 
-// Added ', myactuator_rmd::Driver' to explicitly declare inheritance to Python
   pybind11::class_<myactuator_rmd::motion_mode::CanDriver, myactuator_rmd::Driver>(m_motion, "CanDriver")
     .def(pybind11::init<std::string const&>());
 
   pybind11::class_<myactuator_rmd::motion_mode::ActuatorInterface>(m_motion, "ActuatorInterface")
-    .def(pybind11::init<myactuator_rmd::Driver&, std::uint32_t>(), pybind11::keep_alive<1, 2>()) // <-- UPDATED
-    .def("sendMotionModeSetpoint", &myactuator_rmd::motion_mode::ActuatorInterface::sendMotionModeSetpoint);
+    .def(pybind11::init<myactuator_rmd::Driver&, std::uint32_t>(), pybind11::keep_alive<1, 2>())
+    .def("sendMotionModeSetpoint", &myactuator_rmd::motion_mode::ActuatorInterface::sendMotionModeSetpoint,
+         pybind11::arg("p_des"), pybind11::arg("v_des"), pybind11::arg("kp"), 
+         pybind11::arg("kd"), pybind11::arg("t_ff_percent"), // Updated argument
+         pybind11::arg("kp_max") = 500.0f, pybind11::arg("kd_max") = 5.0f);
 
 }
