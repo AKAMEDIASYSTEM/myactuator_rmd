@@ -156,6 +156,12 @@ namespace myactuator_rmd {
     auto const can_send_id {getCanSendId(actuator_id)};
     auto const expected_receive_id {getCanReceiveId(actuator_id)};
     auto const expected_command_byte {request.getData()[0]};
+
+    // Clear out any backlog that queued up while this process was doing something else
+    // (sleeping, handling other actuators, ...) BEFORE sending the request, so the read
+    // loop below only has to contend with traffic that arrives after this point rather
+    // than an accumulated backlog on top of it.
+    can::Node::drainPending();
     write(can_send_id, request.getData());
 
     // Two distinct kinds of unsolicited traffic can land on the socket interleaved with
@@ -169,8 +175,12 @@ namespace myactuator_rmd {
     //     check; motion_mode doesn't follow that convention, so there we only check the ID.
     // Discard anything that doesn't match and keep reading, bounded so a reply that's
     // genuinely missing still surfaces as an error instead of silently consuming
-    // unlimited unrelated traffic forever.
-    constexpr std::size_t max_discarded_frames {20};
+    // unlimited unrelated traffic forever. Each discarded frame here is one that was
+    // already queued and ready to read (that's why it's cheap) -- a truly silent bus
+    // still fails fast via can::Node::read()'s own socket-level receive timeout, which
+    // fires on the very first call regardless of this bound. What this bound actually
+    // limits is how long we keep discarding a *busy* bus that never produces a match.
+    constexpr std::size_t max_discarded_frames {100};
     for (std::size_t i = 0; i < max_discarded_frames; ++i) {
       can::Frame const frame {can::Node::read()};
       if constexpr (uses_command_byte_echo_v<SEND_ID_OFFSET>) {

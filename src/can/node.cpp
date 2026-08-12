@@ -140,6 +140,19 @@ namespace myactuator_rmd {
       return f;
     }
 
+    std::size_t Node::drainPending() const {
+      std::size_t discarded {0};
+      struct ::can_frame frame {};
+      // MSG_DONTWAIT makes this a non-blocking poll rather than waiting on SO_RCVTIMEO:
+      // once nothing is immediately available, recv() returns -1/EAGAIN and we stop.
+      // Deliberately bypasses read()'s error-frame interpretation -- we're discarding
+      // everything unconditionally here, so there's no need to decode it first.
+      while (::recv(socket_, &frame, sizeof(struct ::can_frame), MSG_DONTWAIT) > 0) {
+        ++discarded;
+      }
+      return discarded;
+    }
+
     void Node::write(Frame const& frame) {
       return write(frame.getId(), frame.getData());
     }
