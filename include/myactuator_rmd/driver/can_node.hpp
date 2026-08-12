@@ -24,6 +24,21 @@
 
 namespace myactuator_rmd {
 
+  /**\var uses_command_byte_echo_v
+   * \brief
+   *    Whether replies on this CAN id range echo the request's command byte in data[0],
+   *    the way the standard single-motor protocol (SingleMotorMessage) does. False for
+   *    the 0x400/0x500 motion_mode range, where data[0] carries packed position data
+   *    instead of a fixed command identifier -- checking it there would reject every
+   *    legitimate reply, since the returned position essentially never exactly equals
+   *    the high byte of the requested one.
+  */
+  template <std::uint32_t SEND_ID_OFFSET>
+  inline constexpr bool uses_command_byte_echo_v {true};
+
+  template <>
+  inline constexpr bool uses_command_byte_echo_v<0x400> {false};
+
   /**\class CanNode
    * \brief
    *    Base class for the CAN driver as well as the actuator mock
@@ -140,23 +155,37 @@ namespace myactuator_rmd {
   std::array<std::uint8_t,8> CanNode<SEND_ID_OFFSET,RECEIVE_ID_OFFSET>::sendRecv(Message const& request, std::uint32_t const actuator_id) {
     auto const can_send_id {getCanSendId(actuator_id)};
     auto const expected_receive_id {getCanReceiveId(actuator_id)};
+    auto const expected_command_byte {request.getData()[0]};
     write(can_send_id, request.getData());
 
-    // The receive filter set up in addId() is shared across every actuator registered on
-    // this driver, so unsolicited traffic from OTHER actuators (e.g. active-angle-reply
-    // broadcasts enabled by servo_listener.py) can land on the socket interleaved with the
-    // reply we're actually waiting for. Discard anything that isn't from actuator_id and
-    // keep reading, bounded so a reply that's genuinely missing still surfaces as an error
-    // instead of silently consuming unlimited unrelated traffic forever.
+    // Two distinct kinds of unsolicited traffic can land on the socket interleaved with
+    // the reply we're actually waiting for:
+    //  1. OTHER actuators' frames -- the receive filter set up in addId() is shared across
+    //     every actuator registered on this driver, so it isn't ID-selective per call.
+    //  2. THIS SAME actuator's own active-reply broadcasts (e.g. enabled by
+    //     servo_listener.py) -- these share this actuator's reply ID, so the ID check
+    //     alone can't tell them apart from the real reply. Where the protocol echoes its
+    //     command byte in data[0] (see uses_command_byte_echo_v), we use that as a second
+    //     check; motion_mode doesn't follow that convention, so there we only check the ID.
+    // Discard anything that doesn't match and keep reading, bounded so a reply that's
+    // genuinely missing still surfaces as an error instead of silently consuming
+    // unlimited unrelated traffic forever.
     constexpr std::size_t max_discarded_frames {20};
     for (std::size_t i = 0; i < max_discarded_frames; ++i) {
       can::Frame const frame {can::Node::read()};
-      if (frame.getId() == expected_receive_id) {
-        return frame.getData();
+      if constexpr (uses_command_byte_echo_v<SEND_ID_OFFSET>) {
+        if ((frame.getId() == expected_receive_id) && (frame.getData()[0] == expected_command_byte)) {
+          return frame.getData();
+        }
+      } else {
+        if (frame.getId() == expected_receive_id) {
+          return frame.getData();
+        }
       }
     }
-    throw Exception("Did not receive a reply from actuator '" + std::to_string(actuator_id) + "' within "
-                     + std::to_string(max_discarded_frames) + " frames -- crowded out by other actuators' traffic on the bus");
+    throw Exception("Did not receive a reply to command '" + std::to_string(expected_command_byte) + "' from actuator '"
+                     + std::to_string(actuator_id) + "' within " + std::to_string(max_discarded_frames)
+                     + " frames -- crowded out by other traffic on the bus");
   }
 
   template <std::uint32_t SEND_ID_OFFSET, std::uint32_t RECEIVE_ID_OFFSET>
