@@ -109,20 +109,6 @@ namespace myactuator_rmd {
         [[nodiscard]]
         Frame read() const;
 
-        /**\fn drainPending
-         * \brief
-         *    Non-blockingly discard any CAN frames already queued for reading, without
-         *    waiting for new ones to arrive. Useful to clear a backlog of stale
-         *    unsolicited traffic (e.g. active-reply broadcasts that piled up while this
-         *    process was doing something else) before a fresh request-reply exchange, so
-         *    a subsequent blocking read() only has to contend with frames that arrive
-         *    after this call rather than ones that queued up beforehand.
-         *
-         * \return
-         *    The number of frames discarded
-        */
-        std::size_t drainPending() const;
-
         /**\fn write
          * \brief
          *   Write the given CAN frame
