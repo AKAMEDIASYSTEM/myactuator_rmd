@@ -139,24 +139,9 @@ namespace myactuator_rmd {
   template <std::uint32_t SEND_ID_OFFSET, std::uint32_t RECEIVE_ID_OFFSET>
   std::array<std::uint8_t,8> CanNode<SEND_ID_OFFSET,RECEIVE_ID_OFFSET>::sendRecv(Message const& request, std::uint32_t const actuator_id) {
     auto const can_send_id {getCanSendId(actuator_id)};
-    auto const expected_receive_id {getCanReceiveId(actuator_id)};
     write(can_send_id, request.getData());
-
-    // The receive filter set up in addId() is shared across every actuator registered on
-    // this driver, so unsolicited traffic from OTHER actuators (e.g. active-angle-reply
-    // broadcasts enabled by servo_listener.py) can land on the socket interleaved with the
-    // reply we're actually waiting for. Discard anything that isn't from actuator_id and
-    // keep reading, bounded so a reply that's genuinely missing still surfaces as an error
-    // instead of silently consuming unlimited unrelated traffic forever.
-    constexpr std::size_t max_discarded_frames {20};
-    for (std::size_t i = 0; i < max_discarded_frames; ++i) {
-      can::Frame const frame {can::Node::read()};
-      if (frame.getId() == expected_receive_id) {
-        return frame.getData();
-      }
-    }
-    throw Exception("Did not receive a reply from actuator '" + std::to_string(actuator_id) + "' within "
-                     + std::to_string(max_discarded_frames) + " frames -- crowded out by other actuators' traffic on the bus");
+    can::Frame const frame {can::Node::read()};
+    return frame.getData();
   }
 
   template <std::uint32_t SEND_ID_OFFSET, std::uint32_t RECEIVE_ID_OFFSET>
