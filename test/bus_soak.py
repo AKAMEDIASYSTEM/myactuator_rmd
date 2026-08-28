@@ -8,6 +8,13 @@ It hammers every actuator on the bus with request-reply transactions, optionally
 broadcasting active replies, and reports per-actuator success and timeout counts, round-trip latency percentiles
 and the driver's own view of the bus.
 
+It deliberately runs against an unmodified build of the driver too, so that the same command can be used to take
+a baseline first: anything the older build does not expose is detected and skipped rather than crashing. On an
+older build the broadcasts have to be turned on separately, and mis-attributed replies show up in the 'protocol'
+column, which is the number this is all about.
+
+Nothing here commands motion. Every request is a read.
+
 Typical use, on the Pi:
 
     # baseline, no broadcasts
@@ -35,6 +42,29 @@ import myactuator_rmd_py as rmd
 CMD_MULTI_TURN_ANGLE = 0x92
 CMD_MOTOR_STATUS_1 = 0x9A
 CMD_MOTOR_STATUS_2 = 0x9C
+
+# Everything the fix adds. Probed rather than assumed so that a baseline run against an unmodified build still
+# produces comparable numbers instead of an AttributeError on the first line.
+HAS_STATISTICS = hasattr(rmd.Driver, "getStatistics")
+HAS_RESPONSE_TIMEOUT = hasattr(rmd.Driver, "setResponseTimeout")
+HAS_ACTIVE_REPLY = hasattr(rmd.ActuatorInterface, "enableActiveReply")
+HAS_CACHE = hasattr(rmd.ActuatorInterface, "getCachedMultiTurnAngle")
+TIMEOUT_EXCEPTION = getattr(rmd, "TimeoutException", None)
+PROTOCOL_EXCEPTION = getattr(rmd, "ProtocolException", None)
+
+
+def classify(exc):
+    """Bucket an exception as 'timeout', 'protocol' or 'other'.
+
+    Done by isinstance rather than by except clauses because the older build has no TimeoutException: there a
+    missing reply surfaces as the socket read timing out, which lands in 'other' and is still perfectly legible
+    next to a 'protocol' count.
+    """
+    if TIMEOUT_EXCEPTION is not None and isinstance(exc, TIMEOUT_EXCEPTION):
+        return "timeout"
+    if PROTOCOL_EXCEPTION is not None and isinstance(exc, PROTOCOL_EXCEPTION):
+        return "protocol"
+    return "other"
 
 
 def parse_ids(spec):
@@ -102,8 +132,12 @@ def main():
     if not actuator_ids:
         parser.error("no actuator ids given")
 
+    if args.compare_cache and not HAS_CACHE:
+        parser.error("this build of myactuator_rmd_py has no response cache, so --compare-cache cannot run")
     if args.compare_cache and args.active_reply <= 0.0:
         parser.error("--compare-cache only means anything together with --active-reply")
+    if args.response_timeout is not None and not HAS_RESPONSE_TIMEOUT:
+        parser.error("this build of myactuator_rmd_py has no settable response timeout")
 
     driver = rmd.CanDriver(args.interface)
     if args.response_timeout is not None:
@@ -113,25 +147,42 @@ def main():
     for actuator_id in actuator_ids:
         actuators[actuator_id] = rmd.ActuatorInterface(driver, actuator_id)
 
+    print("build            : %s" % ("with the transaction fix" if HAS_STATISTICS else "BASELINE, without the fix"))
     print("interface        : %s" % args.interface)
     print("actuators        : %d (%s)" % (len(actuator_ids),
                                           ", ".join(hex(0x140 + i) for i in actuator_ids)))
-    print("response timeout : %.1f ms" % (driver.getResponseTimeout() * 1e3))
-    print("receive buffer   : %d bytes" % driver.getStatistics().recv_buffer_bytes)
-    if driver.getStatistics().recv_buffer_bytes < 1_000_000:
-        print("  note: the kernel clamped the requested receive buffer to net.core.rmem_max.")
-        print("        raise it with:  sudo sysctl -w net.core.rmem_max=8388608")
+    if HAS_RESPONSE_TIMEOUT:
+        print("response timeout : %.1f ms" % (driver.getResponseTimeout() * 1e3))
+    if HAS_STATISTICS:
+        recv_buffer_bytes = driver.getStatistics().recv_buffer_bytes
+        print("receive buffer   : %d bytes" % recv_buffer_bytes)
+        if recv_buffer_bytes < 1000000:
+            print("  note: the kernel clamped the requested receive buffer to net.core.rmem_max.")
+            print("        raise it with:  sudo sysctl -w net.core.rmem_max=8388608")
 
     broadcast_commands = (CMD_MULTI_TURN_ANGLE, CMD_MOTOR_STATUS_1, CMD_MOTOR_STATUS_2)
+    broadcasts_enabled_here = False
     if args.active_reply > 0.0:
-        interval = 1.0 / args.active_reply
-        print("active replies   : %s at %.1f Hz -> %.0f frames/s on the bus"
-              % (", ".join(hex(c) for c in broadcast_commands), args.active_reply,
-                 len(actuator_ids) * len(broadcast_commands) * args.active_reply))
-        for actuator_id, actuator in actuators.items():
-            for command in broadcast_commands:
-                actuator.enableActiveReply(command, interval)
-            time.sleep(0.01)
+        expected_load = len(actuator_ids) * len(broadcast_commands) * args.active_reply
+        if HAS_ACTIVE_REPLY:
+            print("active replies   : %s at %.1f Hz -> %.0f frames/s on the bus"
+                  % (", ".join(hex(c) for c in broadcast_commands), args.active_reply, expected_load))
+            interval = 1.0 / args.active_reply
+            for actuator in actuators.values():
+                for command in broadcast_commands:
+                    actuator.enableActiveReply(command, interval)
+                time.sleep(0.01)
+            broadcasts_enabled_here = True
+        else:
+            # The baseline build cannot send 0xB6 itself. Rather than quietly measuring a quiet bus and
+            # reporting a clean result that means nothing, stop and say what to run first.
+            parser.error(
+                "this build of myactuator_rmd_py cannot enable active replies itself.\n"
+                "Turn them on separately first, e.g. from the yogapi tree:\n"
+                "    for id in %s; do python3 util/enable_active_replies_all.py $id %d; done\n"
+                "then re-run this without --active-reply, and turn them off afterwards with\n"
+                "    python3 util/disable_replies_all_motors.py"
+                % (" ".join(hex(0x140 + i) for i in actuator_ids), int(args.active_reply)))
     else:
         print("active replies   : not enabled by this run")
     print()
@@ -144,7 +195,8 @@ def main():
     cache_gaps = []
     first_error = {}
 
-    driver.resetStatistics()
+    if HAS_STATISTICS:
+        driver.resetStatistics()
     started = time.monotonic()
     cycles = 0
     try:
@@ -162,20 +214,20 @@ def main():
                         cached = actuator.getCachedMultiTurnAngle()
                         if cached is not None and args.command == "angle":
                             cache_gaps.append(abs(cached - value))
-                except rmd.TimeoutException as exc:
-                    timeouts[actuator_id] += 1
-                    first_error.setdefault(actuator_id, str(exc))
-                except rmd.ProtocolException as exc:
-                    protocol_errors[actuator_id] += 1
-                    first_error.setdefault(actuator_id, str(exc))
                 except Exception as exc:  # noqa: BLE001 - the point is to survive and count whatever comes
-                    other_errors[actuator_id] += 1
+                    bucket = classify(exc)
+                    if bucket == "timeout":
+                        timeouts[actuator_id] += 1
+                    elif bucket == "protocol":
+                        protocol_errors[actuator_id] += 1
+                    else:
+                        other_errors[actuator_id] += 1
                     first_error.setdefault(actuator_id, "%s: %s" % (type(exc).__name__, exc))
             cycles += 1
     except KeyboardInterrupt:
         print("interrupted, reporting what we have\n")
     finally:
-        if args.active_reply > 0.0:
+        if broadcasts_enabled_here:
             for actuator in actuators.values():
                 for command in broadcast_commands:
                     try:
@@ -220,7 +272,8 @@ def main():
         print("cached vs polled : %d samples, median gap %.3f deg, max %.3f deg" %
               (len(cache_gaps), statistics.median(cache_gaps), max(cache_gaps)))
 
-    print("driver           : %r" % (driver.getStatistics(),))
+    if HAS_STATISTICS:
+        print("driver           : %r" % (driver.getStatistics(),))
 
     if first_error:
         print("\nfirst error per actuator:")

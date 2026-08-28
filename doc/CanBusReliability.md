@@ -158,6 +158,10 @@ python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-<name>/<n
 
 Active replies are disabled again on exit, including on Ctrl-C.
 
+The script probes for everything the fix adds, so the same commands also run against an unmodified `main`
+build and give a comparable baseline. On `main` it cannot send `0xB6` itself, so it will tell you to enable the
+broadcasts with the existing `yogapi/util/enable_active_replies_all.py` and re-run without `--active-reply`.
+
 The run to compare against is the same command on `main`: the second one, with broadcasts enabled, is where the
 old behaviour should show a large `protocol` count and where this branch should show neither protocol errors nor
 timeouts. `--compare-cache` reports how far the broadcast angle sits from the polled one, which is a check that
