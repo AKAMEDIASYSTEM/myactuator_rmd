@@ -33,6 +33,19 @@ namespace myactuator_rmd {
       using Exception::Exception;
   };
 
+  /**\class TimeoutException
+   * \brief
+   *    Exception class for a request that was sent but whose reply never arrived
+   *
+   *    Distinct from ProtocolException, which means a reply did arrive but could not be understood. On a busy
+   *    bus this is the expected failure for an actuator that has gone quiet or whose reply was dropped, and it
+   *    is usually worth retrying rather than treating as fatal.
+  */
+  class TimeoutException: public Exception {
+    public:
+      using Exception::Exception;
+  };
+
   /**\class ValueRangeException
    * \brief
    *    Exception class for values that are outside their expected range

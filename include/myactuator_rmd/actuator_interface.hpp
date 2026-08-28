@@ -10,8 +10,10 @@
 #define MYACTUATOR_RMD__ACTUATOR_INTERFACE
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "myactuator_rmd/actuator_state/acceleration_type.hpp"
@@ -23,6 +25,7 @@
 #include "myactuator_rmd/actuator_state/motor_status_2.hpp"
 #include "myactuator_rmd/actuator_state/motor_status_3.hpp"
 #include "myactuator_rmd/driver/driver.hpp"
+#include "myactuator_rmd/driver/telemetry.hpp"
 
 
 namespace myactuator_rmd {
@@ -374,6 +377,80 @@ namespace myactuator_rmd {
        *    The desired interruption protection time, 0 in case it should be disabled
       */
       void setTimeout(std::chrono::milliseconds const& timeout);
+
+      /**\fn enableActiveReply
+       * \brief
+       *    Make the actuator broadcast a given reply frame at a fixed interval rather than only on request
+       *
+       *    The broadcasts arrive on this actuator's ordinary reply id carrying their ordinary command byte. The
+       *    driver keeps the most recent one of each, so once this is enabled the corresponding getCached...
+       *    accessor returns fresh state without any further traffic being put on the bus. That is the point of
+       *    it on a crowded bus: twenty actuators polled individually cost twenty request-reply round trips per
+       *    cycle, whereas twenty actuators broadcasting cost none.
+       *
+       *    This is sent without waiting for an acknowledgement, since the actuator's answer to it is itself
+       *    indistinguishable from the broadcasts it is being asked to start.
+       *
+       * \param[in] reply_command
+       *    The command byte to broadcast, e.g. 0x92 multi-turn angle, 0x9A status 1, 0x9C status 2
+       * \param[in] interval
+       *    The broadcast interval, expressed in the 10 ms resolution of the protocol
+      */
+      void enableActiveReply(std::uint8_t const reply_command, std::chrono::milliseconds const& interval);
+
+      /**\fn disableActiveReply
+       * \brief
+       *    Stop the actuator broadcasting the given reply frame
+       *
+       * \param[in] reply_command
+       *    The command byte that should no longer be broadcast
+      */
+      void disableActiveReply(std::uint8_t const reply_command);
+
+      /**\fn getCachedResponse
+       * \brief
+       *    Get the most recent frame this actuator sent for a given command byte without having been asked
+       *
+       * \param[in] reply_command
+       *    The command byte of interest
+       * \return
+       *    The cached frame, or no value if nothing has been received for that command
+      */
+      [[nodiscard]]
+      std::optional<CachedResponse> getCachedResponse(std::uint8_t const reply_command) const;
+
+      /**\fn getCachedMultiTurnAngle
+       * \brief
+       *    Get the multi-turn angle from the actuator's most recent 0x92 broadcast, without asking for it
+       *    Check the age via getCachedResponse before relying on this, so that a silent actuator is not
+       *    mistaken for a stationary one
+       *
+       * \return
+       *    The angle in degrees, or no value if the actuator has not broadcast one
+      */
+      [[nodiscard]]
+      std::optional<float> getCachedMultiTurnAngle() const;
+
+      /**\fn getCachedMotorStatus1
+       * \brief
+       *    Get motor status 1, which carries the error flags, from the actuator's most recent 0x9A broadcast
+       *
+       * \return
+       *    The status, or no value if the actuator has not broadcast one
+      */
+      [[nodiscard]]
+      std::optional<MotorStatus1> getCachedMotorStatus1() const;
+
+      /**\fn getCachedMotorStatus2
+       * \brief
+       *    Get motor status 2, which carries temperature, torque current and speed, from the actuator's most
+       *    recent 0x9C broadcast
+       *
+       * \return
+       *    The status, or no value if the actuator has not broadcast one
+      */
+      [[nodiscard]]
+      std::optional<MotorStatus2> getCachedMotorStatus2() const;
 
       /**\fn shutdownMotor
        * \brief

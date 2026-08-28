@@ -6,7 +6,10 @@
  *    Tobit Flatscher (github.com/2b-t)
 */
 
+#include <chrono>
 #include <cstdint>
+#include <iomanip>
+#include <optional>
 #include <string>
 #include <sstream>
 #include <tuple>
@@ -29,6 +32,7 @@
 #include "myactuator_rmd/can/node.hpp"
 #include "myactuator_rmd/driver/can_driver.hpp"
 #include "myactuator_rmd/driver/driver.hpp"
+#include "myactuator_rmd/driver/telemetry.hpp"
 #include "myactuator_rmd/actuator_constants.hpp"
 #include "myactuator_rmd/actuator_interface.hpp"
 #include "myactuator_rmd/exceptions.hpp"
@@ -69,7 +73,62 @@ namespace myactuator_rmd {
 PYBIND11_MODULE(myactuator_rmd_py, m) {
 
   m.doc() = "Python bindings for MyActuator RMD-X actuator series";
-  pybind11::class_<myactuator_rmd::Driver>(m, "Driver");
+  pybind11::class_<myactuator_rmd::CachedResponse>(m, "CachedResponse")
+    .def("getData", [](myactuator_rmd::CachedResponse const& cached_response) -> pybind11::bytes {
+      auto const& data {cached_response.getData()};
+      return pybind11::bytes(reinterpret_cast<char const*>(data.data()), data.size());
+    })
+    .def("getAge", &myactuator_rmd::CachedResponse::getAge)
+    .def("getAgeSeconds", [](myactuator_rmd::CachedResponse const& cached_response) -> double {
+      return std::chrono::duration<double>(cached_response.getAge()).count();
+    })
+    .def("__repr__", [](myactuator_rmd::CachedResponse const& cached_response) -> std::string {
+      std::ostringstream ss {};
+      ss << "<CachedResponse age=" << std::chrono::duration<double>(cached_response.getAge()).count() << "s data=";
+      for (auto const& byte: cached_response.getData()) {
+        ss << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned int>(byte) << " ";
+      }
+      ss << std::dec << ">";
+      return ss.str();
+    });
+
+  pybind11::class_<myactuator_rmd::BusStatistics>(m, "BusStatistics")
+    .def_readonly("num_frames_received", &myactuator_rmd::BusStatistics::num_frames_received)
+    .def_readonly("num_replies_matched", &myactuator_rmd::BusStatistics::num_replies_matched)
+    .def_readonly("num_frames_cached", &myactuator_rmd::BusStatistics::num_frames_cached)
+    .def_readonly("num_timeouts", &myactuator_rmd::BusStatistics::num_timeouts)
+    .def_readonly("num_bus_errors", &myactuator_rmd::BusStatistics::num_bus_errors)
+    .def_readonly("recv_buffer_bytes", &myactuator_rmd::BusStatistics::recv_buffer_bytes)
+    .def_readonly("last_bus_error", &myactuator_rmd::BusStatistics::last_bus_error)
+    .def("__repr__", [](myactuator_rmd::BusStatistics const& statistics) -> std::string {
+      std::ostringstream ss {};
+      ss << "<BusStatistics received=" << statistics.num_frames_received
+         << " matched=" << statistics.num_replies_matched
+         << " cached=" << statistics.num_frames_cached
+         << " timeouts=" << statistics.num_timeouts
+         << " bus_errors=" << statistics.num_bus_errors
+         << " rcvbuf=" << statistics.recv_buffer_bytes << "B";
+      if (!statistics.last_bus_error.empty()) {
+        ss << " last_error='" << statistics.last_bus_error << "'";
+      }
+      ss << ">";
+      return ss.str();
+    });
+
+  pybind11::class_<myactuator_rmd::Driver>(m, "Driver")
+    // Seconds rather than a datetime.timedelta: the pybind11 chrono caster silently refuses a plain int, which
+    // is exactly what anyone reaching for a timeout is going to type first.
+    .def("setResponseTimeout", [](myactuator_rmd::Driver& driver, double const seconds) {
+      driver.setResponseTimeout(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::duration<double>(seconds)));
+    }, pybind11::arg("seconds"))
+    .def("getResponseTimeout", [](myactuator_rmd::Driver const& driver) -> double {
+      return std::chrono::duration<double>(driver.getResponseTimeout()).count();
+    })
+    .def("getCachedResponse", &myactuator_rmd::Driver::getCachedResponse,
+         pybind11::arg("actuator_id"), pybind11::arg("command"))
+    .def("pollTelemetry", &myactuator_rmd::Driver::pollTelemetry)
+    .def("getStatistics", &myactuator_rmd::Driver::getStatistics)
+    .def("resetStatistics", &myactuator_rmd::Driver::resetStatistics);
   pybind11::class_<myactuator_rmd::CanDriver, myactuator_rmd::Driver>(m, "CanDriver")
     .def(pybind11::init<std::string const&>());
   pybind11::class_<myactuator_rmd::ActuatorInterface>(m, "ActuatorInterface")
@@ -107,9 +166,24 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     .def("setEncoderZero", &myactuator_rmd::ActuatorInterface::setEncoderZero)
     .def("setTimeout", &myactuator_rmd::ActuatorInterface::setTimeout)
     .def("shutdownMotor", &myactuator_rmd::ActuatorInterface::shutdownMotor)
-    .def("stopMotor", &myactuator_rmd::ActuatorInterface::stopMotor);
+    .def("stopMotor", &myactuator_rmd::ActuatorInterface::stopMotor)
+    // Active reply: ask the actuator to broadcast a reply frame every interval_seconds instead of only when
+    // polled, then read it back through the getCached... accessors without putting a request on the bus.
+    .def("enableActiveReply", [](myactuator_rmd::ActuatorInterface& actuator, std::uint8_t const reply_command,
+                                 double const interval_seconds) {
+      actuator.enableActiveReply(reply_command,
+                                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(interval_seconds)));
+    }, pybind11::arg("reply_command"), pybind11::arg("interval_seconds"))
+    .def("disableActiveReply", &myactuator_rmd::ActuatorInterface::disableActiveReply,
+         pybind11::arg("reply_command"))
+    .def("getCachedResponse", &myactuator_rmd::ActuatorInterface::getCachedResponse,
+         pybind11::arg("reply_command"))
+    .def("getCachedMultiTurnAngle", &myactuator_rmd::ActuatorInterface::getCachedMultiTurnAngle)
+    .def("getCachedMotorStatus1", &myactuator_rmd::ActuatorInterface::getCachedMotorStatus1)
+    .def("getCachedMotorStatus2", &myactuator_rmd::ActuatorInterface::getCachedMotorStatus2);
   pybind11::register_exception<myactuator_rmd::Exception>(m, "ActuatorException");
   pybind11::register_exception<myactuator_rmd::ProtocolException>(m, "ProtocolException");
+  pybind11::register_exception<myactuator_rmd::TimeoutException>(m, "TimeoutException");
   pybind11::register_exception<myactuator_rmd::ValueRangeException>(m, "ValueRangeException");
 
   auto m_actuator_state = m.def_submodule("actuator_state", "Submodule for actuator state structures");
