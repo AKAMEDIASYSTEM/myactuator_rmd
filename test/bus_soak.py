@@ -15,16 +15,23 @@ column, which is the number this is all about.
 
 Nothing here commands motion. Every request is a read.
 
-Typical use, on the Pi:
+Typical use, on the Pi. Prefer --motors-json: it takes the actuators straight from the doll's own motor file and
+excludes the Hitec servos and Moog SmartMotors sharing the address space, which --ids cannot do for you.
 
     # baseline, no broadcasts
-    python3 test/bus_soak.py --interface can0 --ids 0x141-0x154 --duration 30
+    python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json --duration 30
 
     # the case that used to fall apart: every actuator broadcasting three frames at 10 Hz
-    python3 test/bus_soak.py --interface can0 --ids 0x141-0x154 --duration 30 --active-reply 10
+    python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json \
+        --duration 30 --active-reply 10
 
     # confirm the broadcasts are actually usable as a state feed
-    python3 test/bus_soak.py --interface can0 --ids 0x141-0x154 --duration 30 --active-reply 10 --compare-cache
+    python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json \
+        --duration 30 --active-reply 10 --compare-cache
+
+--ids takes an explicit set for one-off runs, and does not have to be contiguous:
+
+    python3 test/bus_soak.py --interface can0 --ids 0x142,0x143,0x144,0x148,0x150 --duration 30
 
 Active replies are disabled again on exit, including on Ctrl-C.
 """
@@ -93,11 +100,48 @@ def parse_ids(spec):
     return sorted(ids)
 
 
-def ids_from_motors_json(path):
-    """Read the motor_addresses list out of one of the doll-<name>/<name>-motors.json files."""
+def is_rmd_address(address):
+    """Whether a CAN address belongs to an RMD actuator driven by this library.
+
+    Mirrors the dispatch in new-controller.py: at or above 0x160 the address is a Hitec servo, which speaks a
+    different protocol on the same wire, and 128 to 144 is a Moog SmartMotor, which is not on CAN at all. Getting
+    this wrong does not just skew the numbers, it fills the report with timeouts from devices that were never
+    going to answer an RMD request.
+    """
+    if address >= 0x160:
+        return False
+    if 128 <= address <= 144:
+        return False
+    return True
+
+
+def motors_from_json(path):
+    """Read one of the doll-<name>/<name>-motors.json files.
+
+    Returns the RMD actuators as {actuator_id: name}, plus a list of (address, name, reason) for everything that
+    was left out, so the exclusions are visible rather than quietly assumed.
+    """
     with open(path) as handle:
         payload = json.load(handle)
-    return parse_ids(",".join(payload["motor_addresses"]))
+    addresses = payload["motor_addresses"]
+    # Historically a list of hex strings, currently a dict of hex string to joint name
+    if not isinstance(addresses, dict):
+        addresses = {entry: "" for entry in addresses}
+
+    motors = {}
+    skipped = []
+    for text, name in addresses.items():
+        address = int(text, 16)
+        if not is_rmd_address(address):
+            reason = "Hitec servo" if address >= 0x160 else "Moog SmartMotor, not on CAN"
+            skipped.append((address, name, reason))
+            continue
+        actuator_id = address - 0x140
+        if not 1 <= actuator_id <= 32:
+            skipped.append((address, name, "maps to actuator id %d, outside [1, 32]" % actuator_id))
+            continue
+        motors[actuator_id] = name
+    return motors, skipped
 
 
 def percentile(values, fraction):
@@ -112,8 +156,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--interface", default="can0", help="SocketCAN interface name (default: can0)")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--ids", help="actuator ids or CAN addresses, e.g. '0x141-0x154' or '1-20,25'")
-    group.add_argument("--motors-json", help="path to a <doll>-motors.json to take motor_addresses from")
+    group.add_argument("--ids", help="actuator ids or CAN addresses; ranges and comma-separated sets both work, "
+                                     "e.g. '0x142,0x143,0x148,0x150' or '0x141-0x154' or '1-20,25'")
+    group.add_argument("--motors-json", help="path to a <doll>-motors.json; takes motor_addresses and keeps only "
+                                             "the RMD actuators, reporting what it left out")
     parser.add_argument("--duration", type=float, default=20.0, help="seconds to run for (default: 20)")
     parser.add_argument("--response-timeout", type=float, default=None,
                         help="per-transaction reply timeout in seconds; leave unset to use the driver default")
@@ -125,10 +171,13 @@ def main():
                         help="which request to hammer the bus with (default: angle, i.e. 0x92)")
     args = parser.parse_args()
 
+    skipped = []
     if args.motors_json:
-        actuator_ids = ids_from_motors_json(args.motors_json)
+        names, skipped = motors_from_json(args.motors_json)
+        actuator_ids = sorted(names)
     else:
         actuator_ids = parse_ids(args.ids)
+        names = {actuator_id: "" for actuator_id in actuator_ids}
     if not actuator_ids:
         parser.error("no actuator ids given")
 
@@ -151,6 +200,8 @@ def main():
     print("interface        : %s" % args.interface)
     print("actuators        : %d (%s)" % (len(actuator_ids),
                                           ", ".join(hex(0x140 + i) for i in actuator_ids)))
+    for address, name, reason in skipped:
+        print("  skipped        : %s %s (%s)" % (hex(address), name or "?", reason))
     if HAS_RESPONSE_TIMEOUT:
         print("response timeout : %.1f ms" % (driver.getResponseTimeout() * 1e3))
     if HAS_STATISTICS:
@@ -243,12 +294,13 @@ def main():
     total_other = sum(other_errors.values())
     total = total_ok + total_timeouts + total_protocol + total_other
 
-    print("%-8s %8s %9s %9s %7s %9s %9s %9s" %
-          ("id", "ok", "timeout", "protocol", "other", "p50 ms", "p95 ms", "max ms"))
+    print("%-7s %-15s %8s %9s %9s %7s %9s %9s %9s" %
+          ("id", "name", "ok", "timeout", "protocol", "other", "p50 ms", "p95 ms", "max ms"))
     for actuator_id in actuator_ids:
         samples = latencies[actuator_id]
-        print("%-8s %8d %9d %9d %7d %9.2f %9.2f %9.2f" % (
-            hex(0x140 + actuator_id), ok[actuator_id], timeouts[actuator_id],
+        print("%-7s %-15s %8d %9d %9d %7d %9.2f %9.2f %9.2f" % (
+            hex(0x140 + actuator_id), (names.get(actuator_id) or "")[:15],
+            ok[actuator_id], timeouts[actuator_id],
             protocol_errors[actuator_id], other_errors[actuator_id],
             percentile(samples, 0.50), percentile(samples, 0.95),
             max(samples) if samples else float("nan")))
@@ -278,7 +330,7 @@ def main():
     if first_error:
         print("\nfirst error per actuator:")
         for actuator_id, message in sorted(first_error.items()):
-            print("  %s  %s" % (hex(0x140 + actuator_id), message))
+            print("  %s %s  %s" % (hex(0x140 + actuator_id), names.get(actuator_id) or "", message))
 
     return 0 if total_ok == total else 1
 

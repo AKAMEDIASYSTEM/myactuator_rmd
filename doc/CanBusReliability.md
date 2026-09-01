@@ -175,22 +175,27 @@ change alters the size of `can::Node` and the vtable of `Driver`.
 `test/bus_soak.py` hammers every actuator with request-reply transactions and reports per-actuator success and
 timeout counts, latency percentiles and the driver statistics.
 
+Point it at the doll's own motor file rather than an id range. Addresses on an RMD bus are rarely contiguous,
+and the same address space carries Hitec servos (at or above 0x160) and Moog SmartMotors (128 to 144) that are
+not RMD actuators at all -- included by mistake they contribute nothing but timeouts. `--motors-json` applies the
+same classification `new-controller.py` uses and prints what it excluded.
+
 ```bash
-python3 test/bus_soak.py --interface can0 --ids 0x141-0x154 --duration 30
+python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json --duration 30
 ```
 
 ```bash
-python3 test/bus_soak.py --interface can0 --ids 0x141-0x154 --duration 30 --active-reply 10
+python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json --duration 30 --active-reply 10
 ```
 
 ```bash
-python3 test/bus_soak.py --interface can0 --ids 0x141-0x154 --duration 30 --active-reply 10 --compare-cache
+python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json --duration 30 --active-reply 10 --compare-cache
 ```
 
-It can also take the id list straight from the existing motor files:
+`--ids` still takes an explicit set for one-off runs, and does not have to be contiguous:
 
 ```bash
-python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-<name>/<name>-motors.json --duration 30
+python3 test/bus_soak.py --interface can0 --ids 0x142,0x143,0x144,0x148,0x150 --duration 30
 ```
 
 Active replies are disabled again on exit, including on Ctrl-C.
