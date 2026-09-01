@@ -172,8 +172,12 @@ def main():
                              "newrmd.py; raise it if actuators go quiet during setup)")
     parser.add_argument("--ignore-silent", action="store_true",
                         help="run the soak even if some actuators did not start broadcasting")
-    parser.add_argument("--command", choices=("angle", "status2"), default="angle",
-                        help="which request to hammer the bus with (default: angle, i.e. 0x92)")
+    parser.add_argument("--command", choices=("angle", "status2", "status3", "version"), default="angle",
+                        help="which request to hammer the bus with. 'angle' (0x92) and 'status2' (0x9C) are "
+                             "commands this script also broadcasts; 'status3' (0x9D) and 'version' (0xB2) are "
+                             "not. Polling a non-broadcast command while broadcasts are on tells you whether an "
+                             "actuator has stopped answering requests altogether or only for the commands it is "
+                             "busy broadcasting (default: angle)")
     args = parser.parse_args()
 
     skipped = []
@@ -288,8 +292,12 @@ def main():
                 try:
                     if args.command == "angle":
                         value = actuator.getMultiTurnAngle()
-                    else:
+                    elif args.command == "status2":
                         value = actuator.getMotorStatus2().shaft_angle
+                    elif args.command == "status3":
+                        value = actuator.getMotorStatus3().temperature
+                    else:
+                        value = actuator.getVersionDate()
                     latencies[actuator_id].append((time.monotonic() - began) * 1e3)
                     ok[actuator_id] += 1
                     if args.compare_cache:
