@@ -223,10 +223,18 @@ def main():
     broadcast_commands = (CMD_MULTI_TURN_ANGLE, CMD_MOTOR_STATUS_1, CMD_MOTOR_STATUS_2)
     broadcasts_enabled_here = False
     if args.active_reply > 0.0:
-        expected_load = len(actuator_ids) * len(broadcast_commands) * args.active_reply
+        # Protocol section 2.35.1: several configured commands are replied to "cyclically and alternately
+        # according to the set time", so the interval governs the gap between consecutive frames, not the period
+        # of each command. The bus therefore sees one frame per actuator per interval, and any individual command
+        # comes round only once every len(broadcast_commands) intervals.
+        expected_load = len(actuator_ids) * args.active_reply
+        per_command_period = len(broadcast_commands) / args.active_reply
         if HAS_ACTIVE_REPLY:
-            print("active replies   : %s at %.1f Hz -> %.0f frames/s on the bus"
-                  % (", ".join(hex(c) for c in broadcast_commands), args.active_reply, expected_load))
+            print("active replies   : %s cycling at %.1f Hz -> %.0f frames/s on the bus, each command every %.2f s"
+                  % (", ".join(hex(c) for c in broadcast_commands), args.active_reply, expected_load,
+                     per_command_period))
+            print("  note           : per protocol 2.35.1 an actuator in active reply mode stops answering")
+            print("                   requests. Polling a command while broadcasts are on is expected to fail.")
             interval = 1.0 / args.active_reply
             for actuator in actuators.values():
                 for command in broadcast_commands:
@@ -237,13 +245,13 @@ def main():
                     time.sleep(args.reply_setup_delay)
             broadcasts_enabled_here = True
 
-            # Confirm the broadcasts actually started before spending the run measuring their absence. An
-            # actuator that went quiet here has not merely failed to start broadcasting, it has stopped
-            # answering at all, and that is worth stopping for rather than burying in the results table.
-            time.sleep(0.5)
+            # Confirm the broadcasts actually started before spending the run measuring their absence. Wait long
+            # enough for the cycle to visit every configured command at least twice, otherwise an actuator that
+            # is broadcasting perfectly well looks silent purely because its turn has not come round yet.
+            time.sleep(max(1.0, 2.0 * per_command_period))
             driver.pollTelemetry()
             silent = [i for i in actuator_ids
-                      if actuators[i].getCachedResponse(CMD_MULTI_TURN_ANGLE) is None]
+                      if all(actuators[i].getCachedResponse(c) is None for c in broadcast_commands)]
             if silent:
                 print("  WARNING: %d of %d actuators are not broadcasting after being asked to: %s"
                       % (len(silent), len(actuator_ids), ", ".join(hex(0x140 + i) for i in silent)))
