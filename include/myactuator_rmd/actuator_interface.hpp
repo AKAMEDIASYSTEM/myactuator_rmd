@@ -302,6 +302,59 @@ namespace myactuator_rmd {
       */
       Feedback sendVelocitySetpoint(float const speed);
 
+      /**\fn sendCurrentSetpointNoReply
+       * \brief
+       *    Command a current without waiting for the acknowledgement, see sendPositionAbsoluteSetpointNoReply
+       *
+       * \param[in] current
+       *    The current set-point in Ampere
+      */
+      void sendCurrentSetpointNoReply(float const current);
+
+      /**\fn sendPositionAbsoluteSetpointNoReply
+       * \brief
+       *    Command an absolute position without waiting for the acknowledgement
+       *
+       *    For an actuator in active reply mode. Protocol section 2.35.1: "If an active reply command is set,
+       *    the motor will not reply after receiving the command" -- not merely for the commands it broadcasts,
+       *    but for anything. The ordinary sendPositionAbsoluteSetpoint would therefore wait out the full
+       *    response timeout on every single command and then throw, so a broadcasting actuator has to be
+       *    commanded through this instead.
+       *
+       *    There is no acknowledgement and so no way to tell whether the actuator acted on this. The state of
+       *    such an actuator comes from its broadcasts, via getCachedMultiTurnAngle and the other cached
+       *    accessors, and the age of those values is the only evidence that it is still alive.
+       *
+       * \param[in] position
+       *    The absolute position set-point in degrees
+       * \param[in] max_speed
+       *    The maximum speed for the motion in degrees per second
+      */
+      void sendPositionAbsoluteSetpointNoReply(float const position, float const max_speed = 500.0);
+
+      /**\fn sendForcePositionSetpointNoReply
+       * \brief
+       *    Command a force-limited position without waiting for the acknowledgement,
+       *    see sendPositionAbsoluteSetpointNoReply
+       *
+       * \param[in] position
+       *    The absolute position set-point in degrees
+       * \param[in] max_speed
+       *    The maximum speed for the motion in degrees per second
+       * \param[in] max_torque
+       *    The torque limit as a percentage of rated current [0, 255]
+      */
+      void sendForcePositionSetpointNoReply(float const position, float const max_speed, std::uint8_t const max_torque);
+
+      /**\fn sendVelocitySetpointNoReply
+       * \brief
+       *    Command a velocity without waiting for the acknowledgement, see sendPositionAbsoluteSetpointNoReply
+       *
+       * \param[in] speed
+       *    The velocity set-point in degrees per second
+      */
+      void sendVelocitySetpointNoReply(float const speed);
+
       /**\fn setAcceleration
        * \brief
        *    Write the acceleration/deceleration for the different modes to RAM and ROM (persistent)

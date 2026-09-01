@@ -119,8 +119,10 @@ def is_rmd_address(address):
 def motors_from_json(path):
     """Read one of the doll-<name>/<name>-motors.json files.
 
-    Returns the RMD actuators as {actuator_id: name}, plus a list of (address, name, reason) for everything that
-    was left out, so the exclusions are visible rather than quietly assumed.
+    Returns the RMD actuators as {actuator_id: name}, a list of (address, name, reason) for everything that was
+    left out so the exclusions are visible rather than quietly assumed, and the actuator ids listed under an
+    optional "broadcast_motors" key -- the actuators the installation puts into active reply mode, which is a
+    property of the rig rather than of any one test run.
     """
     with open(path) as handle:
         payload = json.load(handle)
@@ -142,7 +144,13 @@ def motors_from_json(path):
             skipped.append((address, name, "maps to actuator id %d, outside [1, 32]" % actuator_id))
             continue
         motors[actuator_id] = name
-    return motors, skipped
+
+    broadcast = []
+    for text in payload.get("broadcast_motors", []):
+        actuator_id = int(text, 16) - 0x140
+        if actuator_id in motors:
+            broadcast.append(actuator_id)
+    return motors, skipped, sorted(broadcast)
 
 
 def percentile(values, fraction):
@@ -171,7 +179,13 @@ def main():
                         help="restrict the broadcasts to these actuators and poll the rest. This is the "
                              "production-shaped case: a couple of actuators broadcasting while the others are "
                              "still commanded and expected to reply, which is where a reply can be crowded out "
-                             "by unrelated traffic. e.g. '0x144,0x145' for the knees")
+                             "by unrelated traffic. e.g. '0x144,0x145' for the knees. Defaults to the "
+                             "broadcast_motors list in --motors-json if there is one")
+    parser.add_argument("--broadcast-commands", default="0x92", metavar="CMDS",
+                        help="which commands to broadcast (default: 0x92, the multi-turn angle). Each additional "
+                             "command multiplies how long any one of them takes to come round again, since the "
+                             "actuator cycles through the set one frame per interval rather than sending them "
+                             "all every interval")
     parser.add_argument("--compare-cache", action="store_true",
                         help="also read the cached broadcast angle and report how far it lags the polled one")
     parser.add_argument("--reply-setup-delay", type=float, default=0.01, metavar="SECONDS",
@@ -188,8 +202,9 @@ def main():
     args = parser.parse_args()
 
     skipped = []
+    json_broadcast_ids = []
     if args.motors_json:
-        names, skipped = motors_from_json(args.motors_json)
+        names, skipped, json_broadcast_ids = motors_from_json(args.motors_json)
         actuator_ids = sorted(names)
     else:
         actuator_ids = parse_ids(args.ids)
@@ -227,7 +242,7 @@ def main():
             print("  note: the kernel clamped the requested receive buffer to net.core.rmem_max.")
             print("        raise it with:  sudo sysctl -w net.core.rmem_max=8388608")
 
-    broadcast_commands = (CMD_MULTI_TURN_ANGLE, CMD_MOTOR_STATUS_1, CMD_MOTOR_STATUS_2)
+    broadcast_commands = tuple(int(c, 0) for c in args.broadcast_commands.split(","))
     broadcasts_enabled_here = False
 
     # An actuator in active reply mode answers nothing (protocol 2.35.1), so polling one is a test of the
@@ -235,8 +250,8 @@ def main():
     # production one: a few actuators broadcasting while the rest are still commanded and expected to reply.
     # That is where a reply can be crowded out by unrelated traffic, and where taking the wrong frame used to
     # corrupt the result.
-    if args.broadcast_ids:
-        broadcast_ids = [i for i in parse_ids(args.broadcast_ids)]
+    if args.broadcast_ids or json_broadcast_ids:
+        broadcast_ids = parse_ids(args.broadcast_ids) if args.broadcast_ids else list(json_broadcast_ids)
         unknown = [i for i in broadcast_ids if i not in actuators]
         if unknown:
             parser.error("--broadcast-ids names actuators that are not in the polled set: %s"

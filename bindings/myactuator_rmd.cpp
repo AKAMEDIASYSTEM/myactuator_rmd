@@ -158,6 +158,13 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     .def("sendForcePositionSetpoint", &myactuator_rmd::ActuatorInterface::sendForcePositionSetpoint)
     .def("sendTorqueSetpoint", &myactuator_rmd::ActuatorInterface::sendTorqueSetpoint)
     .def("sendVelocitySetpoint", &myactuator_rmd::ActuatorInterface::sendVelocitySetpoint)
+    // No-reply variants for actuators in active reply mode, which per protocol 2.35.1 answer nothing at
+    // all. Using the ordinary methods against one costs the full response timeout on every command.
+    .def("sendCurrentSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendCurrentSetpointNoReply)
+    .def("sendPositionAbsoluteSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendPositionAbsoluteSetpointNoReply,
+         pybind11::arg("position"), pybind11::arg("max_speed") = 500.0f)
+    .def("sendForcePositionSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendForcePositionSetpointNoReply)
+    .def("sendVelocitySetpointNoReply", &myactuator_rmd::ActuatorInterface::sendVelocitySetpointNoReply)
     .def("setAcceleration", &myactuator_rmd::ActuatorInterface::setAcceleration)
     .def("setCanBaudRate", &myactuator_rmd::ActuatorInterface::setCanBaudRate)
     .def("setCanId", &myactuator_rmd::ActuatorInterface::setCanId)
@@ -332,6 +339,10 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     .def("sendMotionModeSetpoint", &myactuator_rmd::motion_mode::ActuatorInterface::sendMotionModeSetpoint,
          pybind11::arg("p_des"), pybind11::arg("v_des"), pybind11::arg("kp"), 
          pybind11::arg("kd"), pybind11::arg("t_ff_percent"), // Updated argument
+         pybind11::arg("kp_max") = 500.0f, pybind11::arg("kd_max") = 5.0f)
+    .def("sendMotionModeSetpointNoReply", &myactuator_rmd::motion_mode::ActuatorInterface::sendMotionModeSetpointNoReply,
+         pybind11::arg("p_des"), pybind11::arg("v_des"), pybind11::arg("kp"),
+         pybind11::arg("kd"), pybind11::arg("t_ff_percent"),
          pybind11::arg("kp_max") = 500.0f, pybind11::arg("kd_max") = 5.0f);
 
 }

@@ -237,6 +237,42 @@ torque current, shaft speed and shaft angle -- the same MotorStatus2 payload the
 and correlated to the command that produced it. Polling twenty actuators costs roughly 3,000 frames/s, about 44%
 of a 1 Mbps bus. Active reply reduces that to 20 frames/s but gives up command acknowledgement entirely.
 
+## Commanding an actuator that is broadcasting
+
+Because an actuator in active reply mode answers nothing, every ordinary motion command against one waits out
+the full response timeout and then throws. The `...NoReply` variants send without waiting:
+
+```python
+actuator.sendPositionAbsoluteSetpointNoReply(position_deg, max_speed_dps)
+actuator.sendVelocitySetpointNoReply(speed_dps)
+actuator.sendForcePositionSetpointNoReply(position_deg, max_speed_dps, max_torque)
+actuator.sendCurrentSetpointNoReply(current_a)
+motion_actuator.sendMotionModeSetpointNoReply(p_des, v_des, kp, kd, t_ff_percent)
+```
+
+There is no acknowledgement, so nothing confirms the actuator acted. Its state comes from the broadcasts, and
+the age of a cached value is the only evidence it is still alive.
+
+Whether active reply also suppresses the 0x500 motion mode reply is not stated in the protocol and has not been
+checked on hardware. If `sendMotionModeSetpoint` keeps working against a broadcasting actuator, it does not.
+
+### Reading state back
+
+```python
+cached = actuator.getCachedResponse(0x92)
+if cached is not None and cached.getAgeSeconds() < max_age:
+    angle_deg = actuator.getCachedMultiTurnAngle()
+```
+
+Two things to hold on to. `None` means never heard from, which is not the same as stale -- an actuator that
+stops broadcasting keeps returning its last value indefinitely, and a frozen angle is indistinguishable from a
+stationary joint unless the age is checked. And use the 0x92 cache for position: `MotorStatus2.shaft_angle` from
+0x9C is a 1 degree integer, where 0x92 carries 0.01 degree resolution.
+
+Broadcasting one command rather than three matters more than it looks. The actuator emits one frame per interval
+and cycles through whatever set is configured, so three commands at 10 Hz means any individual one arrives every
+300 ms, not every 100 ms.
+
 ## What this does not change
 
 The driver is still synchronous: a transaction blocks its caller until the reply arrives. That is fine while the

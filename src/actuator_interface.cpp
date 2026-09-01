@@ -178,6 +178,31 @@ namespace myactuator_rmd {
     return response.getStatus();
   }
 
+  void ActuatorInterface::sendCurrentSetpointNoReply(float const current) {
+    SetTorqueRequest const request {current};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::sendPositionAbsoluteSetpointNoReply(float const position, float const max_speed) {
+    SetPositionAbsoluteRequest const request {position, max_speed};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::sendForcePositionSetpointNoReply(float const position, float const max_speed,
+                                                           std::uint8_t const max_torque) {
+    SetForcePositionRequest const request {position, max_speed, max_torque};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::sendVelocitySetpointNoReply(float const speed) {
+    SetVelocityRequest const request {speed};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
   void ActuatorInterface::setAcceleration(std::uint32_t const acceleration, AccelerationType const mode) {
     SetAccelerationRequest const request {acceleration, mode};
     [[maybe_unused]] SetAccelerationResponse const response {driver_.sendRecv(request, actuator_id_)};
