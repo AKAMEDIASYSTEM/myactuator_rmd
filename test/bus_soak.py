@@ -21,13 +21,14 @@ excludes the Hitec servos and Moog SmartMotors sharing the address space, which 
     # baseline, no broadcasts
     python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json --duration 30
 
-    # the case that used to fall apart: every actuator broadcasting three frames at 10 Hz
+    # the production-shaped case: knees broadcasting, everything else still commanded and expected to reply
     python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json \
-        --duration 30 --active-reply 10
+        --duration 30 --active-reply 10 --broadcast-ids 0x144,0x145
 
-    # confirm the broadcasts are actually usable as a state feed
-    python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json \
-        --duration 30 --active-reply 10 --compare-cache
+Note that an actuator in active reply mode answers nothing at all, not merely the commands it is broadcasting
+(protocol section 2.35.1: "If an active reply command is set, the motor will not reply after receiving the
+command"). So --active-reply without --broadcast-ids puts every actuator into a mode where every request times
+out by design, which measures the protocol rather than the driver.
 
 --ids takes an explicit set for one-off runs, and does not have to be contiguous:
 
@@ -164,7 +165,13 @@ def main():
     parser.add_argument("--response-timeout", type=float, default=None,
                         help="per-transaction reply timeout in seconds; leave unset to use the driver default")
     parser.add_argument("--active-reply", type=float, default=0.0, metavar="HZ",
-                        help="enable 0x92/0x9A/0x9C broadcasts at this rate on every actuator (default: off)")
+                        help="enable 0x92/0x9A/0x9C broadcasts at this rate (default: off). Applies to every "
+                             "actuator unless --broadcast-ids narrows it")
+    parser.add_argument("--broadcast-ids", metavar="IDS",
+                        help="restrict the broadcasts to these actuators and poll the rest. This is the "
+                             "production-shaped case: a couple of actuators broadcasting while the others are "
+                             "still commanded and expected to reply, which is where a reply can be crowded out "
+                             "by unrelated traffic. e.g. '0x144,0x145' for the knees")
     parser.add_argument("--compare-cache", action="store_true",
                         help="also read the cached broadcast angle and report how far it lags the polled one")
     parser.add_argument("--reply-setup-delay", type=float, default=0.01, metavar="SECONDS",
@@ -222,21 +229,47 @@ def main():
 
     broadcast_commands = (CMD_MULTI_TURN_ANGLE, CMD_MOTOR_STATUS_1, CMD_MOTOR_STATUS_2)
     broadcasts_enabled_here = False
+
+    # An actuator in active reply mode answers nothing (protocol 2.35.1), so polling one is a test of the
+    # protocol rather than of the driver. The interesting configuration is the mixed one, which is also the
+    # production one: a few actuators broadcasting while the rest are still commanded and expected to reply.
+    # That is where a reply can be crowded out by unrelated traffic, and where taking the wrong frame used to
+    # corrupt the result.
+    if args.broadcast_ids:
+        broadcast_ids = [i for i in parse_ids(args.broadcast_ids)]
+        unknown = [i for i in broadcast_ids if i not in actuators]
+        if unknown:
+            parser.error("--broadcast-ids names actuators that are not in the polled set: %s"
+                         % ", ".join(hex(0x140 + i) for i in unknown))
+        if args.active_reply <= 0.0:
+            parser.error("--broadcast-ids needs --active-reply to say how fast they should broadcast")
+    elif args.active_reply > 0.0:
+        broadcast_ids = list(actuator_ids)
+    else:
+        broadcast_ids = []
+    poll_ids = [i for i in actuator_ids if i not in broadcast_ids]
+
     if args.active_reply > 0.0:
         # Protocol section 2.35.1: several configured commands are replied to "cyclically and alternately
         # according to the set time", so the interval governs the gap between consecutive frames, not the period
         # of each command. The bus therefore sees one frame per actuator per interval, and any individual command
         # comes round only once every len(broadcast_commands) intervals.
-        expected_load = len(actuator_ids) * args.active_reply
+        expected_load = len(broadcast_ids) * args.active_reply
         per_command_period = len(broadcast_commands) / args.active_reply
         if HAS_ACTIVE_REPLY:
-            print("active replies   : %s cycling at %.1f Hz -> %.0f frames/s on the bus, each command every %.2f s"
+            print("broadcasting     : %d actuators (%s)"
+                  % (len(broadcast_ids), ", ".join(hex(0x140 + i) for i in broadcast_ids)))
+            print("                   %s cycling at %.1f Hz -> %.0f frames/s, each command every %.2f s"
                   % (", ".join(hex(c) for c in broadcast_commands), args.active_reply, expected_load,
                      per_command_period))
-            print("  note           : per protocol 2.35.1 an actuator in active reply mode stops answering")
-            print("                   requests. Polling a command while broadcasts are on is expected to fail.")
+            print("polled           : %d actuators (%s)"
+                  % (len(poll_ids), ", ".join(hex(0x140 + i) for i in poll_ids) or "none"))
+            if not poll_ids:
+                print("  note           : per protocol 2.35.1 an actuator in active reply mode stops answering")
+                print("                   requests, so every transaction below is expected to time out. Use")
+                print("                   --broadcast-ids to leave some actuators answering.")
             interval = 1.0 / args.active_reply
-            for actuator in actuators.values():
+            for actuator in (actuators[i] for i in broadcast_ids):
                 for command in broadcast_commands:
                     actuator.enableActiveReply(command, interval)
                     # Pace these the way newrmd.py does. A 0xB6 write reconfigures the actuator rather than just
@@ -250,14 +283,14 @@ def main():
             # is broadcasting perfectly well looks silent purely because its turn has not come round yet.
             time.sleep(max(1.0, 2.0 * per_command_period))
             driver.pollTelemetry()
-            silent = [i for i in actuator_ids
+            silent = [i for i in broadcast_ids
                       if all(actuators[i].getCachedResponse(c) is None for c in broadcast_commands)]
             if silent:
                 print("  WARNING: %d of %d actuators are not broadcasting after being asked to: %s"
-                      % (len(silent), len(actuator_ids), ", ".join(hex(0x140 + i) for i in silent)))
+                      % (len(silent), len(broadcast_ids), ", ".join(hex(0x140 + i) for i in silent)))
                 print("           Recover them with:  cd ../yogapi/util && python3 disable_replies_all_motors.py")
                 if not args.ignore_silent:
-                    for actuator in actuators.values():
+                    for actuator in (actuators[i] for i in broadcast_ids):
                         for command in broadcast_commands:
                             try:
                                 actuator.disableActiveReply(command)
@@ -266,7 +299,7 @@ def main():
                             time.sleep(args.reply_setup_delay)
                     parser.error("aborting before the soak; pass --ignore-silent to measure anyway")
             else:
-                print("  verified       : all %d actuators are broadcasting" % len(actuator_ids))
+                print("  verified       : all %d actuators are broadcasting" % len(broadcast_ids))
         else:
             # The baseline build cannot send 0xB6 itself. Rather than quietly measuring a quiet bus and
             # reporting a clean result that means nothing, stop and say what to run first.
@@ -276,16 +309,16 @@ def main():
                 "    for id in %s; do python3 util/enable_active_replies_all.py $id %d; done\n"
                 "then re-run this without --active-reply, and turn them off afterwards with\n"
                 "    python3 util/disable_replies_all_motors.py"
-                % (" ".join(hex(0x140 + i) for i in actuator_ids), int(args.active_reply)))
+                % (" ".join(hex(0x140 + i) for i in broadcast_ids), int(args.active_reply)))
     else:
         print("active replies   : not enabled by this run")
     print()
 
-    ok = {i: 0 for i in actuator_ids}
-    timeouts = {i: 0 for i in actuator_ids}
-    protocol_errors = {i: 0 for i in actuator_ids}
-    other_errors = {i: 0 for i in actuator_ids}
-    latencies = {i: [] for i in actuator_ids}
+    ok = {i: 0 for i in poll_ids}
+    timeouts = {i: 0 for i in poll_ids}
+    protocol_errors = {i: 0 for i in poll_ids}
+    other_errors = {i: 0 for i in poll_ids}
+    latencies = {i: [] for i in poll_ids}
     cache_gaps = []
     first_error = {}
 
@@ -295,7 +328,8 @@ def main():
     cycles = 0
     try:
         while time.monotonic() - started < args.duration:
-            for actuator_id, actuator in actuators.items():
+            for actuator_id in poll_ids:
+                actuator = actuators[actuator_id]
                 began = time.monotonic()
                 try:
                     if args.command == "angle":
@@ -326,7 +360,7 @@ def main():
         print("interrupted, reporting what we have\n")
     finally:
         if broadcasts_enabled_here:
-            for actuator in actuators.values():
+            for actuator in (actuators[i] for i in broadcast_ids):
                 for command in broadcast_commands:
                     try:
                         actuator.disableActiveReply(command)
@@ -343,7 +377,7 @@ def main():
 
     print("%-7s %-15s %8s %9s %9s %7s %9s %9s %9s" %
           ("id", "name", "ok", "timeout", "protocol", "other", "p50 ms", "p95 ms", "max ms"))
-    for actuator_id in actuator_ids:
+    for actuator_id in poll_ids:
         samples = latencies[actuator_id]
         print("%-7s %-15s %8d %9d %9d %7d %9.2f %9.2f %9.2f" % (
             hex(0x140 + actuator_id), (names.get(actuator_id) or "")[:15],

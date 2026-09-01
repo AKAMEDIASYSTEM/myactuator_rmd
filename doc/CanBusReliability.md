@@ -209,6 +209,34 @@ old behaviour should show a large `protocol` count and where this branch should 
 timeouts. `--compare-cache` reports how far the broadcast angle sits from the polled one, which is a check that
 the cached feed is genuinely usable rather than merely present.
 
+## Active reply and request-reply are mutually exclusive
+
+Protocol section 2.35.1 is explicit: "If an active reply command is set, the motor will not reply after receiving
+the command." Not merely the commands being broadcast -- anything. Confirmed on hardware: polling 0x9D against
+nine actuators in active reply mode times out 198 times out of 198, while frames keep arriving and being cached.
+
+Two consequences worth being clear about, because they look identical from the application and only one of them
+is a software problem:
+
+- An actuator **in** active reply mode never answers a 0xA4 position command. The feedback frame is not being
+  lost, it is not being sent. No driver change can recover it; the state has to come from the broadcasts, via
+  the response cache.
+- An actuator **not** in active reply mode, on a bus where others are broadcasting, does answer normally. This is
+  where the old driver failed: it read one frame and returned it unchecked, so a broadcast that arrived first was
+  consumed in place of the reply, which was then left queued to corrupt the following transaction. That is the
+  bug this branch fixes.
+
+The mixed configuration is the production one and the only one worth measuring, hence `--broadcast-ids`:
+
+```bash
+python3 test/bus_soak.py --interface can0 --motors-json ../yogapi/doll-yogapi/yogapi-motors.json --duration 30 --active-reply 10 --broadcast-ids 0x144,0x145
+```
+
+It is also worth asking whether active reply earns its place at all. A 0xA4 reply already carries temperature,
+torque current, shaft speed and shaft angle -- the same MotorStatus2 payload the 0x9C broadcast carries -- fresh
+and correlated to the command that produced it. Polling twenty actuators costs roughly 3,000 frames/s, about 44%
+of a 1 Mbps bus. Active reply reduces that to 20 frames/s but gives up command acknowledgement entirely.
+
 ## What this does not change
 
 The driver is still synchronous: a transaction blocks its caller until the reply arrives. That is fine while the
