@@ -133,6 +133,43 @@ configuration no longer needs a second python-can bus alongside the driver. It i
 acknowledgement, because the actuator's answer to it is itself indistinguishable from the broadcasts it is being
 asked to start.
 
+## Building and installing
+
+Two pre-existing packaging bugs made it easy to build this branch and then go on running the old binary. Both
+are fixed here, but they are worth knowing about because the symptom is silent.
+
+`install(TARGETS myactuator_rmd_py DESTINATION ${PYTHON_INSTALL_DIR}/${PROJECT_NAME})` relied on
+`PYTHON_INSTALL_DIR`, which is set by `ament_cmake_python` and by nothing else. Outside ROS it expanded to
+nothing, so the destination became the absolute path `/myactuator_rmd`. `sudo make install` wrote the module to
+the filesystem root, reported success, and `import myactuator_rmd_py` carried on resolving to whatever older
+copy was in site-packages. The non-ROS branch now installs to `Python3_SITEARCH` and prints where at configure
+time.
+
+`pip install .` failed with "could not build wheel" because there was no `pyproject.toml`, so pip built in an
+isolated environment containing no pybind11 and `find_package(pybind11 CONFIG REQUIRED)` failed a long way above
+the visible error. There is a `pyproject.toml` now, and `setup.py` passes `pybind11_DIR` through to CMake.
+
+Either route works:
+
+```bash
+pip3 install .
+```
+
+```bash
+mkdir -p build && cd build && cmake .. -D PYTHON_BINDINGS=ON && make -j$(nproc) && sudo make install
+```
+
+Watch for the `Python bindings will be installed to:` line during configure, and check afterwards that the
+module Python actually imports is the one just built:
+
+```bash
+cd /tmp && python3 -c "import myactuator_rmd_py as rmd, os, time; print(rmd.__file__, time.ctime(os.path.getmtime(rmd.__file__)))"
+```
+
+Note that `myactuator_rmd_py` links against `libmyactuator_rmd.so` and the two must come from the same build.
+Installing one without the other leaves a mismatch that links cleanly and misbehaves at runtime, because this
+change alters the size of `can::Node` and the vtable of `Driver`.
+
 ## Checking it on hardware
 
 `test/bus_soak.py` hammers every actuator with request-reply transactions and reports per-actuator success and

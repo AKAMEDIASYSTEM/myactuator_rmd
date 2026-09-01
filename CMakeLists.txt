@@ -72,10 +72,24 @@ if(PYTHON_BINDINGS)
   if(ament_cmake_FOUND)
     find_package(ament_cmake_python REQUIRED)
     ament_python_install_package(${PROJECT_NAME})
+    # Under ROS 2 the module lives inside the package directory, hence 'import myactuator_rmd.myactuator_rmd_py'
+    install(TARGETS myactuator_rmd_py
+      DESTINATION ${PYTHON_INSTALL_DIR}/${PROJECT_NAME}
+    )
+  else()
+    # PYTHON_INSTALL_DIR is set by ament_cmake_python and by nothing else. Without ROS it used to expand to
+    # nothing, leaving 'DESTINATION /myactuator_rmd' -- an absolute path, so 'make install' silently wrote the
+    # module to a directory off the filesystem root that is on no interpreter's sys.path. The build succeeded,
+    # the install reported success, and 'import myactuator_rmd_py' went on resolving to whatever older copy was
+    # already in site-packages, which is a genuinely difficult thing to notice.
+    if(NOT PYTHON_INSTALL_DIR)
+      set(PYTHON_INSTALL_DIR "${Python3_SITEARCH}")
+    endif()
+    message(STATUS "Python bindings will be installed to: ${PYTHON_INSTALL_DIR}")
+    install(TARGETS myactuator_rmd_py
+      DESTINATION "${PYTHON_INSTALL_DIR}"
+    )
   endif()
-  install(TARGETS myactuator_rmd_py
-    DESTINATION ${PYTHON_INSTALL_DIR}/${PROJECT_NAME}
-  )
 endif()
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND BUILD_TESTING)

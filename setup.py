@@ -34,6 +34,17 @@ class CMakeBuild(build_ext):
             f"-D CMAKE_BUILD_TYPE={cfg}",
             f"-D PYTHON_BINDINGS=on"
         ]
+
+        # CMake cannot find pybind11 on its own when pip builds in an isolated environment, since the package is
+        # unpacked somewhere temporary that is on sys.path but not on CMAKE_PREFIX_PATH. Hand it the directory
+        # explicitly, the same way one would on the command line with
+        # -D pybind11_DIR=$(python3 -m pybind11 --cmakedir).
+        try:
+            import pybind11
+            cmake_args.append(f"-D pybind11_DIR={pybind11.get_cmake_dir()}")
+        except ImportError:
+            print("warning: pybind11 not importable, leaving CMake to locate it by itself", file=sys.stderr)
+
         build_args = []
         if "CMAKE_ARGS" in os.environ:
             cmake_args += [item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
