@@ -165,6 +165,8 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
          pybind11::arg("position"), pybind11::arg("max_speed") = 500.0f)
     .def("sendForcePositionSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendForcePositionSetpointNoReply)
     .def("sendVelocitySetpointNoReply", &myactuator_rmd::ActuatorInterface::sendVelocitySetpointNoReply)
+    .def("stopMotorNoReply", &myactuator_rmd::ActuatorInterface::stopMotorNoReply)
+    .def("shutdownMotorNoReply", &myactuator_rmd::ActuatorInterface::shutdownMotorNoReply)
     .def("setAcceleration", &myactuator_rmd::ActuatorInterface::setAcceleration)
     .def("setCanBaudRate", &myactuator_rmd::ActuatorInterface::setCanBaudRate)
     .def("setCanId", &myactuator_rmd::ActuatorInterface::setCanId)

@@ -203,6 +203,18 @@ namespace myactuator_rmd {
     return;
   }
 
+  void ActuatorInterface::stopMotorNoReply() {
+    StopMotorRequest const request {};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::shutdownMotorNoReply() {
+    ShutdownMotorRequest const request {};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
   void ActuatorInterface::setAcceleration(std::uint32_t const acceleration, AccelerationType const mode) {
     SetAccelerationRequest const request {acceleration, mode};
     [[maybe_unused]] SetAccelerationResponse const response {driver_.sendRecv(request, actuator_id_)};

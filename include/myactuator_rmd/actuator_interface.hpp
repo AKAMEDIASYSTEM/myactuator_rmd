@@ -355,6 +355,21 @@ namespace myactuator_rmd {
       */
       void sendVelocitySetpointNoReply(float const speed);
 
+      /**\fn stopMotorNoReply
+       * \brief
+       *    Stop the motor without waiting for the acknowledgement, see sendPositionAbsoluteSetpointNoReply
+       *    This exists mainly for the emergency stop path: the ordinary stopMotor sends the frame and then
+       *    blocks for the full response timeout waiting for an answer that an actuator in active reply mode is
+       *    never going to give, which in an async control loop delays every other actuator's stop as well
+      */
+      void stopMotorNoReply();
+
+      /**\fn shutdownMotorNoReply
+       * \brief
+       *    Turn off the motor without waiting for the acknowledgement, see stopMotorNoReply
+      */
+      void shutdownMotorNoReply();
+
       /**\fn setAcceleration
        * \brief
        *    Write the acceleration/deceleration for the different modes to RAM and ROM (persistent)
