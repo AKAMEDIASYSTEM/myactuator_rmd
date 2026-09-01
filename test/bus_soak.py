@@ -167,6 +167,11 @@ def main():
                         help="enable 0x92/0x9A/0x9C broadcasts at this rate on every actuator (default: off)")
     parser.add_argument("--compare-cache", action="store_true",
                         help="also read the cached broadcast angle and report how far it lags the polled one")
+    parser.add_argument("--reply-setup-delay", type=float, default=0.01, metavar="SECONDS",
+                        help="pause after each 0xB6 write while enabling broadcasts (default: 0.01, matching "
+                             "newrmd.py; raise it if actuators go quiet during setup)")
+    parser.add_argument("--ignore-silent", action="store_true",
+                        help="run the soak even if some actuators did not start broadcasting")
     parser.add_argument("--command", choices=("angle", "status2"), default="angle",
                         help="which request to hammer the bus with (default: angle, i.e. 0x92)")
     args = parser.parse_args()
@@ -222,8 +227,34 @@ def main():
             for actuator in actuators.values():
                 for command in broadcast_commands:
                     actuator.enableActiveReply(command, interval)
-                time.sleep(0.01)
+                    # Pace these the way newrmd.py does. A 0xB6 write reconfigures the actuator rather than just
+                    # reading from it, and three of them arriving microseconds apart is not something the older
+                    # working code ever asked of it.
+                    time.sleep(args.reply_setup_delay)
             broadcasts_enabled_here = True
+
+            # Confirm the broadcasts actually started before spending the run measuring their absence. An
+            # actuator that went quiet here has not merely failed to start broadcasting, it has stopped
+            # answering at all, and that is worth stopping for rather than burying in the results table.
+            time.sleep(0.5)
+            driver.pollTelemetry()
+            silent = [i for i in actuator_ids
+                      if actuators[i].getCachedResponse(CMD_MULTI_TURN_ANGLE) is None]
+            if silent:
+                print("  WARNING: %d of %d actuators are not broadcasting after being asked to: %s"
+                      % (len(silent), len(actuator_ids), ", ".join(hex(0x140 + i) for i in silent)))
+                print("           Recover them with:  cd ../yogapi/util && python3 disable_replies_all_motors.py")
+                if not args.ignore_silent:
+                    for actuator in actuators.values():
+                        for command in broadcast_commands:
+                            try:
+                                actuator.disableActiveReply(command)
+                            except Exception:  # noqa: BLE001
+                                pass
+                            time.sleep(args.reply_setup_delay)
+                    parser.error("aborting before the soak; pass --ignore-silent to measure anyway")
+            else:
+                print("  verified       : all %d actuators are broadcasting" % len(actuator_ids))
         else:
             # The baseline build cannot send 0xB6 itself. Rather than quietly measuring a quiet bus and
             # reporting a clean result that means nothing, stop and say what to run first.
