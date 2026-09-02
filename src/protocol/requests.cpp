@@ -111,6 +111,32 @@ namespace myactuator_rmd {
     return timeout;
   }
 
+  SetActiveReplyRequest::SetActiveReplyRequest(std::uint8_t const reply_command, std::chrono::milliseconds const& interval)
+  : SingleMotorRequest{} {
+    // The protocol expresses the interval in units of 10 ms across two bytes, so anything faster than 10 ms or
+    // longer than roughly 11 minutes cannot be represented.
+    auto const units {interval.count()/10};
+    if ((units < 0) || (units > 65535)) {
+      throw ValueRangeException("Active reply interval '" + std::to_string(interval.count()) +
+                                " ms' outside the representable range [0, 655350] ms!");
+    }
+    if ((interval.count() > 0) && (units == 0)) {
+      throw ValueRangeException("Active reply interval '" + std::to_string(interval.count()) +
+                                " ms' is shorter than the 10 ms resolution of the protocol!");
+    }
+    setAt(reply_command, 1);
+    setAt(static_cast<std::uint8_t>((units > 0) ? 1 : 0), 2);
+    setAt(static_cast<std::uint16_t>(units), 3);
+    return;
+  }
+
+  std::chrono::milliseconds SetActiveReplyRequest::getInterval() const noexcept {
+    if (getAs<std::uint8_t>(2) == 0) {
+      return std::chrono::milliseconds(0);
+    }
+    return std::chrono::milliseconds(10*static_cast<std::int64_t>(getAs<std::uint16_t>(3)));
+  }
+
   SetVelocityRequest::SetVelocityRequest(float const speed)
   : SingleMotorRequest{} {
     auto const s {static_cast<std::int32_t>(speed*100.0f)};

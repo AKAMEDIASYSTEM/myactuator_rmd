@@ -1,0 +1,11 @@
+# Without this file pip falls back to the legacy setup.py path but still builds in an isolated environment, one
+# that contains neither pybind11 nor a wheel backend. CMake's `find_package(pybind11 CONFIG REQUIRED)` then fails
+# and the whole install ends as "could not build wheel", with the CMake error buried far above. Declaring the
+# build dependencies here puts pybind11 into that isolated environment; setup.py passes its CMake directory on.
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel",
+    "pybind11>=2.6",
+]
+build-backend = "setuptools.build_meta"

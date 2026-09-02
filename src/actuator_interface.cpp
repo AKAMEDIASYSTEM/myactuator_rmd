@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "myactuator_rmd/actuator_state/can_baud_rate.hpp"
@@ -12,6 +13,8 @@
 #include "myactuator_rmd/actuator_state/motor_status_2.hpp"
 #include "myactuator_rmd/actuator_state/motor_status_3.hpp"
 #include "myactuator_rmd/driver/driver.hpp"
+#include "myactuator_rmd/driver/telemetry.hpp"
+#include "myactuator_rmd/protocol/command_type.hpp"
 #include "myactuator_rmd/protocol/requests.hpp"
 #include "myactuator_rmd/protocol/responses.hpp"
 #include "myactuator_rmd/exceptions.hpp"
@@ -175,6 +178,43 @@ namespace myactuator_rmd {
     return response.getStatus();
   }
 
+  void ActuatorInterface::sendCurrentSetpointNoReply(float const current) {
+    SetTorqueRequest const request {current};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::sendPositionAbsoluteSetpointNoReply(float const position, float const max_speed) {
+    SetPositionAbsoluteRequest const request {position, max_speed};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::sendForcePositionSetpointNoReply(float const position, float const max_speed,
+                                                           std::uint8_t const max_torque) {
+    SetForcePositionRequest const request {position, max_speed, max_torque};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::sendVelocitySetpointNoReply(float const speed) {
+    SetVelocityRequest const request {speed};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::stopMotorNoReply() {
+    StopMotorRequest const request {};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::shutdownMotorNoReply() {
+    ShutdownMotorRequest const request {};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
   void ActuatorInterface::setAcceleration(std::uint32_t const acceleration, AccelerationType const mode) {
     SetAccelerationRequest const request {acceleration, mode};
     [[maybe_unused]] SetAccelerationResponse const response {driver_.sendRecv(request, actuator_id_)};
@@ -221,6 +261,49 @@ namespace myactuator_rmd {
     SetTimeoutRequest const request {timeout};
     [[maybe_unused]] SetTimeoutResponse const response {driver_.sendRecv(request, actuator_id_)};
     return;
+  }
+
+  void ActuatorInterface::enableActiveReply(std::uint8_t const reply_command, std::chrono::milliseconds const& interval) {
+    SetActiveReplyRequest const request {reply_command, interval};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  void ActuatorInterface::disableActiveReply(std::uint8_t const reply_command) {
+    SetActiveReplyRequest const request {reply_command, std::chrono::milliseconds(0)};
+    driver_.send(request, actuator_id_);
+    return;
+  }
+
+  std::optional<CachedResponse> ActuatorInterface::getCachedResponse(std::uint8_t const reply_command) const {
+    return driver_.getCachedResponse(actuator_id_, reply_command);
+  }
+
+  std::optional<float> ActuatorInterface::getCachedMultiTurnAngle() const {
+    auto const cached {getCachedResponse(static_cast<std::uint8_t>(CommandType::READ_MULTI_TURN_ANGLE))};
+    if (!cached.has_value()) {
+      return std::nullopt;
+    }
+    GetMultiTurnAngleResponse const response {cached->getData()};
+    return response.getAngle();
+  }
+
+  std::optional<MotorStatus1> ActuatorInterface::getCachedMotorStatus1() const {
+    auto const cached {getCachedResponse(static_cast<std::uint8_t>(CommandType::READ_MOTOR_STATUS_1_AND_ERROR_FLAG))};
+    if (!cached.has_value()) {
+      return std::nullopt;
+    }
+    GetMotorStatus1Response const response {cached->getData()};
+    return response.getStatus();
+  }
+
+  std::optional<MotorStatus2> ActuatorInterface::getCachedMotorStatus2() const {
+    auto const cached {getCachedResponse(static_cast<std::uint8_t>(CommandType::READ_MOTOR_STATUS_2))};
+    if (!cached.has_value()) {
+      return std::nullopt;
+    }
+    GetMotorStatus2Response const response {cached->getData()};
+    return response.getStatus();
   }
 
   void ActuatorInterface::shutdownMotor() {

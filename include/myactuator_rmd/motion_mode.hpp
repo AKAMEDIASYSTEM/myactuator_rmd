@@ -29,6 +29,20 @@ namespace motion_mode {
           return MotionModeResponse{response_data};
       }
 
+      /**\fn sendMotionModeSetpointNoReply
+       * \brief
+       *    Command a motion mode set-point without waiting for the acknowledgement, for an actuator in active
+       *    reply mode which per protocol section 2.35.1 will not answer any request.
+       *
+       *    Whether active reply suppresses the 0x500 motion mode reply as well as the 0x240 ones is not stated
+       *    in the protocol and has not been verified on hardware. If sendMotionModeSetpoint keeps working
+       *    against a broadcasting actuator then it does not, and this is unnecessary for motion mode.
+      */
+      void sendMotionModeSetpointNoReply(float p_des, float v_des, float kp, float kd, float t_ff_percent, float kp_max = 500.0f, float kd_max = 5.0f) {
+          MotionModeRequest const request{p_des, v_des, kp, kd, t_ff_percent, kp_max, kd_max};
+          driver_.send(request, actuator_id_);
+      }
+
     private:
       Driver& driver_;
       std::uint32_t actuator_id_;

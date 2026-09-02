@@ -418,6 +418,48 @@ namespace myactuator_rmd {
       float getSpeed() const noexcept;
   };
 
+  /**\class SetActiveReplyRequest
+   * \brief
+   *    Request for configuring the active reply feature, which makes the actuator broadcast a chosen reply
+   *    frame at a fixed interval instead of only answering when asked.
+   *
+   *    The broadcasts land on the ordinary reply CAN id and carry the ordinary command byte, so they are
+   *    indistinguishable from a solicited reply other than by timing. The driver therefore keeps the most
+   *    recent one of each per actuator, see Driver::getCachedResponse: enabling a broadcast here turns that
+   *    cache into a live state feed that costs no further requests.
+  */
+  class SetActiveReplyRequest: public SingleMotorRequest<CommandType::ACTIVE_REPLY_SETTING> {
+    public:
+      /**\fn SetActiveReplyRequest
+       * \brief
+       *    Class constructor
+       *
+       * \param[in] reply_command
+       *    The command byte the actuator should broadcast, e.g. 0x92 multi-turn angle, 0x9A status 1,
+       *    0x9C status 2
+       * \param[in] interval
+       *    The broadcast interval, rounded down to the 10 ms resolution of the protocol. Zero disables the
+       *    broadcast for that command
+      */
+      SetActiveReplyRequest(std::uint8_t const reply_command, std::chrono::milliseconds const& interval);
+      SetActiveReplyRequest() = delete;
+      SetActiveReplyRequest(SetActiveReplyRequest const&) = default;
+      SetActiveReplyRequest& operator = (SetActiveReplyRequest const&) = default;
+      SetActiveReplyRequest(SetActiveReplyRequest&&) = default;
+      SetActiveReplyRequest& operator = (SetActiveReplyRequest&&) = default;
+      using SingleMotorRequest::SingleMotorRequest;
+
+      /**\fn getInterval
+       * \brief
+       *    Get the broadcast interval that this request sets
+       *
+       * \return
+       *    The broadcast interval, zero if the request disables the broadcast
+      */
+      [[nodiscard]]
+      std::chrono::milliseconds getInterval() const noexcept;
+  };
+
   using ShutdownMotorRequest = SingleMotorRequest<CommandType::SHUTDOWN_MOTOR>;
   using StopMotorRequest = SingleMotorRequest<CommandType::STOP_MOTOR>;
 

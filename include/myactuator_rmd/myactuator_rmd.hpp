@@ -12,6 +12,7 @@
 
 #include "myactuator_rmd/driver/can_driver.hpp"
 #include "myactuator_rmd/driver/driver.hpp"
+#include "myactuator_rmd/driver/telemetry.hpp"
 #include "myactuator_rmd/actuator_constants.hpp"
 #include "myactuator_rmd/actuator_interface.hpp"
 #include "myactuator_rmd/exceptions.hpp"
