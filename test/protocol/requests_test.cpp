@@ -6,6 +6,7 @@
  *    Tobit Flatscher (github.com/2b-t)
 */
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 
@@ -112,6 +113,31 @@ namespace myactuator_rmd {
       EXPECT_NEAR(position, -360.0f, 0.1f);
       auto const max_speed {request.getMaxSpeed()};
       EXPECT_NEAR(max_speed, 500.0f, 0.1f);
+    }
+
+    // The frame below is the worked example from protocol V4.4 section 2.22.4: 500 dps in
+    // DATA[2..3] and a +360 deg increment (36000 at 0.01 deg/LSB) in DATA[4..7]. Identical
+    // layout to 0xA4, which is the point -- only the command byte differs.
+    TEST(SetPositionIncrementalRequestTest, parsingPositivePosition) {
+      myactuator_rmd::SetPositionIncrementalRequest const request ({0xA8, 0x00, 0xF4, 0x01, 0xA0, 0x8C, 0x00, 0x00});
+      auto const position {request.getPosition()};
+      EXPECT_NEAR(position, 360.0f, 0.1f);
+      auto const max_speed {request.getMaxSpeed()};
+      EXPECT_NEAR(max_speed, 500.0f, 0.1f);
+    }
+
+    TEST(SetPositionIncrementalRequestTest, parsingNegativePosition) {
+      myactuator_rmd::SetPositionIncrementalRequest const request ({0xA8, 0x00, 0xF4, 0x01, 0x60, 0x73, 0xFF, 0xFF});
+      auto const position {request.getPosition()};
+      EXPECT_NEAR(position, -360.0f, 0.1f);
+      auto const max_speed {request.getMaxSpeed()};
+      EXPECT_NEAR(max_speed, 500.0f, 0.1f);
+    }
+
+    TEST(SetPositionIncrementalRequestTest, constructedFrameMatchesTheManualExample) {
+      myactuator_rmd::SetPositionIncrementalRequest const request {360.0f, 500.0f};
+      std::array<std::uint8_t,8> const expected {0xA8, 0x00, 0xF4, 0x01, 0xA0, 0x8C, 0x00, 0x00};
+      EXPECT_EQ(request.getData(), expected);
     }
 
     TEST(SetTimeoutOffRequestTest, parsing) {

@@ -90,6 +90,23 @@ namespace myactuator_rmd {
     return static_cast<float>(getAs<std::int32_t>(4)/100.0f);
   }
 
+  SetPositionIncrementalRequest::SetPositionIncrementalRequest(float const position, float const max_speed)
+  : SingleMotorRequest{} {
+    auto const v {static_cast<std::uint16_t>(max_speed)};
+    auto const pos {static_cast<std::int32_t>(position*100.0f)};
+    setAt(v, 2);
+    setAt(pos, 4);
+    return;
+  }
+
+  float SetPositionIncrementalRequest::getMaxSpeed() const noexcept {
+    return static_cast<float>(getAs<std::uint16_t>(2));
+  }
+
+  float SetPositionIncrementalRequest::getPosition() const noexcept {
+    return static_cast<float>(getAs<std::int32_t>(4)/100.0f);
+  }
+
   SetTorqueRequest::SetTorqueRequest(float const current)
   : SingleMotorRequest{} {
     auto const c {static_cast<std::int16_t>(current/0.01f)};

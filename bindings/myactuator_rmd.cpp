@@ -155,6 +155,8 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     .def("reset", &myactuator_rmd::ActuatorInterface::reset)
     .def("sendCurrentSetpoint", &myactuator_rmd::ActuatorInterface::sendCurrentSetpoint)
     .def("sendPositionAbsoluteSetpoint", &myactuator_rmd::ActuatorInterface::sendPositionAbsoluteSetpoint)
+    .def("sendPositionIncrementalSetpoint", &myactuator_rmd::ActuatorInterface::sendPositionIncrementalSetpoint,
+         pybind11::arg("position"), pybind11::arg("max_speed") = 500.0f)
     .def("sendForcePositionSetpoint", &myactuator_rmd::ActuatorInterface::sendForcePositionSetpoint)
     .def("sendTorqueSetpoint", &myactuator_rmd::ActuatorInterface::sendTorqueSetpoint)
     .def("sendVelocitySetpoint", &myactuator_rmd::ActuatorInterface::sendVelocitySetpoint)
@@ -162,6 +164,8 @@ PYBIND11_MODULE(myactuator_rmd_py, m) {
     // all. Using the ordinary methods against one costs the full response timeout on every command.
     .def("sendCurrentSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendCurrentSetpointNoReply)
     .def("sendPositionAbsoluteSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendPositionAbsoluteSetpointNoReply,
+         pybind11::arg("position"), pybind11::arg("max_speed") = 500.0f)
+    .def("sendPositionIncrementalSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendPositionIncrementalSetpointNoReply,
          pybind11::arg("position"), pybind11::arg("max_speed") = 500.0f)
     .def("sendForcePositionSetpointNoReply", &myactuator_rmd::ActuatorInterface::sendForcePositionSetpointNoReply)
     .def("sendVelocitySetpointNoReply", &myactuator_rmd::ActuatorInterface::sendVelocitySetpointNoReply)

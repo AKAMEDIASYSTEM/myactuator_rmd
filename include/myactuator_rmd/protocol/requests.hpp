@@ -305,6 +305,55 @@ namespace myactuator_rmd {
       float getPosition() const noexcept;
   };
 
+  /**\class SetPositionIncrementalRequest
+   * \brief
+   *    Request for moving the actuator by a relative angle with a given maximum speed
+   *
+   *    Protocol V4.4 section 2.22: "run the input position increment with the current position as the
+   *    starting point". The send layout is byte-for-byte the same as 0xA4 -- maxSpeed as a uint16 at
+   *    1 dps/LSB in DATA[2..3], angleControl as an int32 at 0.01 degree/LSB in DATA[4..7] -- only the
+   *    command byte differs, which is why this derives the same accessors.
+  */
+  class SetPositionIncrementalRequest: public SingleMotorRequest<CommandType::INCREMENTAL_POSITION_CLOSED_LOOP_CONTROL> {
+    public:
+      /**\fn SetPositionIncrementalRequest
+       * \brief
+       *    Class constructor
+       *
+       * \param[in] position
+       *    The position increment in degree, signed: its sign sets the direction of travel
+       * \param[in] max_speed
+       *    The maximum speed for the motion in degree per second
+      */
+      SetPositionIncrementalRequest(float const position, float const max_speed);
+      SetPositionIncrementalRequest() = delete;
+      SetPositionIncrementalRequest(SetPositionIncrementalRequest const&) = default;
+      SetPositionIncrementalRequest& operator = (SetPositionIncrementalRequest const&) = default;
+      SetPositionIncrementalRequest(SetPositionIncrementalRequest&&) = default;
+      SetPositionIncrementalRequest& operator = (SetPositionIncrementalRequest&&) = default;
+      using SingleMotorRequest::SingleMotorRequest;
+
+      /**\fn getMaxSpeed
+       * \brief
+       *    Get the maximum speed
+       *
+       * \return
+       *    The maximum speed for the motion in degree per second
+      */
+      [[nodiscard]]
+      float getMaxSpeed() const noexcept;
+
+      /**\fn getPosition
+       * \brief
+       *    Get the position increment
+       *
+       * \return
+       *    The position increment in degree
+      */
+      [[nodiscard]]
+      float getPosition() const noexcept;
+  };
+
   class SetForcePositionRequest: public SingleMotorRequest<CommandType::FORCE_POSITION_CLOSED_LOOP_CONTROL> {
   public:
     /**

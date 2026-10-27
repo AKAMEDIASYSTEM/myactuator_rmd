@@ -266,6 +266,25 @@ namespace myactuator_rmd {
       */
       Feedback sendPositionAbsoluteSetpoint(float const position, float const max_speed = 500.0);
 
+      /**\fn sendPositionIncrementalSetpoint
+       * \brief
+       *    Move the actuator by a relative angle, additionally specifying a maximum velocity
+       *
+       *    Protocol V4.4 section 2.22 (0xA8): the increment is applied with the current position as the
+       *    starting point, so unlike sendPositionAbsoluteSetpoint this needs no prior angle read and
+       *    cannot be thrown off by a dropped one. The actuator resolves the target against the position
+       *    it is actually at, which is also what makes it unsuitable for anything cumulative: issue it
+       *    twice and you move twice, with no absolute target to converge on.
+       *
+       * \param[in] position
+       *    The position increment in degree, signed: its sign sets the direction of travel
+       * \param[in] max_speed
+       *    The maximum speed for the motion in degree per second
+       * \return
+       *    Feedback control message containing actuator position, velocity, torque and temperature
+      */
+      Feedback sendPositionIncrementalSetpoint(float const position, float const max_speed = 500.0);
+
       /**\fn sendTorqueSetpoint
        * \brief
        *    Send a torque set-point to the actuator by setting the current
@@ -331,6 +350,23 @@ namespace myactuator_rmd {
        *    The maximum speed for the motion in degrees per second
       */
       void sendPositionAbsoluteSetpointNoReply(float const position, float const max_speed = 500.0);
+
+      /**\fn sendPositionIncrementalSetpointNoReply
+       * \brief
+       *    Command a relative move without waiting for the acknowledgement,
+       *    see sendPositionAbsoluteSetpointNoReply
+       *
+       *    Worth more caution than the absolute variant: with no acknowledgement there is no evidence the
+       *    increment was applied, and a relative command that is silently dropped leaves the actuator short
+       *    by exactly that increment with nothing in the protocol to reveal it. An absolute set-point that
+       *    goes missing is corrected by the next one; a lost increment is not.
+       *
+       * \param[in] position
+       *    The position increment in degrees, signed: its sign sets the direction of travel
+       * \param[in] max_speed
+       *    The maximum speed for the motion in degrees per second
+      */
+      void sendPositionIncrementalSetpointNoReply(float const position, float const max_speed = 500.0);
 
       /**\fn sendForcePositionSetpointNoReply
        * \brief
