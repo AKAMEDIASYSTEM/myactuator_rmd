@@ -11,6 +11,20 @@ This repository holds a **CAN driver software development kit** (SDK) for the [*
 
 For the [`ros2_control` integration](https://control.ros.org/humble/index.html) please refer to [this repository](https://github.com/2b-t/myactuator_rmd_ros).
 
+### This fork (AKAMEDIASYSTEM/myactuator_rmd)
+
+This is a fork of [2b-t/myactuator_rmd](https://github.com/2b-t/myactuator_rmd) used by the yogapi controller (`new-controller.py`), which needs these additions; the upstream module will not work with it:
+
+- **`0xA9` force-position control**: `sendForcePositionSetpoint` (position with a torque limit).
+- **Motion mode** (`include/myactuator_rmd/motion_mode.hpp`, Python `myactuator_rmd_py.motion_mode`): a second driver on the `0x400`/`0x500` IDs for MIT-style position/velocity/kp/kd/feed-forward setpoints (`sendMotionModeSetpoint`).
+- **Incremental position** (`0xA8`): `sendPositionIncrementalSetpoint`.
+- **Active replies (broadcasts)**: `enableActiveReply` / `disableActiveReply`, `Driver.pollTelemetry()` and cached readings such as `getCachedMultiTurnAngle()`, with some actuators broadcasting while the rest are polled.
+- **No-reply command variants** (`...NoReply`, including `stopMotorNoReply` and `shutdownMotorNoReply`) for actuators that are broadcasting and so do not answer requests.
+- **Replies matched to their requests** instead of taking the next frame on the bus. Background and the `test/bus_soak.py` soak test are in [`doc/CanBusReliability.md`](doc/CanBusReliability.md).
+- RH-series actuator constants in `actuator_constants.hpp`.
+
+The build steps below are unchanged. yogapi expects the compiled `myactuator_rmd_py` module to be importable from its own folder (see yogapi's `new-pi-setup-notes.txt`).
+
 
 
 ## 1. Installation
