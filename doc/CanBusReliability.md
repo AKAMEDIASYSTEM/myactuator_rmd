@@ -1,7 +1,7 @@
 # Request-reply reliability on a busy CAN bus
 
-Notes for the `fix/can-transaction-correlation` branch. This describes what was wrong, what changed, and how to
-check on hardware whether it helped.
+Notes for the `fix/can-transaction-correlation` branch, merged into this fork's main branch (92d7f9b). This
+describes what was wrong, what changed, and how to check on hardware whether it helped.
 
 ## What was wrong
 
